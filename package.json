@@ -1,0 +1,23 @@
+{
+  "name": "lockon-contracts",
+  "description": "This is the set of Lock Token, Vesting and Staking contracts of lockon protocol",
+  "license": "GPL-2.0-or-later",
+  "version": "0.1.1",
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "test": "npx hardhat test",
+    "deploy:dev_goerli": "NODE_ENV=dev npx hardhat run --network goerli",
+    "deploy:dev_polygon": "NODE_ENV=dev npx hardhat run --network mumbai"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^3.0.0",
+    "@openzeppelin/contracts": "^5.0.0",
+    "@openzeppelin/contracts-upgradeable": "^5.0.0",
+    "@openzeppelin/hardhat-upgrades": "^2.3.3",
+    "dotenv": "^16.3.1",
+    "ethers": "^6.7.1",
+    "hardhat": "^2.17.1",
+    "hardhat-contract-sizer": "^2.10.0",
+    "hardhat-gas-reporter": "^1.0.9"
+  }
+}
