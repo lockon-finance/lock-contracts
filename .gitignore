@@ -28,4 +28,7 @@ artifacts
 .vscode/*
 .idea
 
+# Yarn
+yarn-error.log
+
 

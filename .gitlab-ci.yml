@@ -1,8 +1,8 @@
 default:
   image: ghcr.io/foundry-rs/foundry:latest
   before_script:
-    - apk add --update npm
-    - npm install
+    - apk add --update yarn
+    - yarn install
 
 variables:
   FOUNDRY_PROFILE: "ci"

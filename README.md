@@ -59,15 +59,23 @@ Start a local Ethereum node (Anvil) for development (deploy on a local network, 
 $ anvil
 ```
 
+### Coverage
+
+Run a coverage for solidity file across all folder
+
+```shell
+$ forge coverage
+```
+
 ### Deploy
 
 To deploy your smart contracts, use the following command:
 
 ```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+$ yarn <deploy_command_in_package.json> scripts/<script_name>
 ```
 
-Replace <your_rpc_url> with your Ethereum RPC URL and <your_private_key> with your private key or define it in the script.
+Replace <deploy_command_in_package.json> with correspond command define in package.json and <script_name> with name of the deployment script.
 
 ### Cast
 
