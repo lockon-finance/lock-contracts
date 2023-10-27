@@ -1,9 +1,9 @@
 import "@nomicfoundation/hardhat-toolbox";
+import "@nomicfoundation/hardhat-foundry"
 import "@openzeppelin/hardhat-upgrades";
 import "hardhat-contract-sizer";
 import "hardhat-gas-reporter";
 import dotenv from "dotenv";
-
 dotenv.config();
 
 const privateKey = process.env.PRIVATE_KEY;
