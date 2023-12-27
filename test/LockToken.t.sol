@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity ^0.8.21;
+pragma solidity ^0.8.23;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
@@ -10,16 +10,9 @@ contract LockTokenTest is Test {
     address public owner = address(bytes20(bytes("owner")));
     address public operator = address(bytes20(bytes("operator")));
     address public accountOne = address(1);
-    error ERC20InsufficientBalance(
-        address sender,
-        uint256 balance,
-        uint256 needed
-    );
-    error ERC20InsufficientAllowance(
-        address spender,
-        uint256 allowance,
-        uint256 needed
-    );
+
+    error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed);
+    error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed);
 
     function setUp() public {
         vm.startPrank(owner);
@@ -53,10 +46,7 @@ contract LockTokenTest is Test {
         lockToken.initialize("LockToken", "LOCK", owner, operator);
         vm.expectRevert(
             abi.encodeWithSelector(
-                ERC20InsufficientBalance.selector,
-                owner,
-                lockToken.balanceOf(owner),
-                6_000_000_001 * 1e18
+                ERC20InsufficientBalance.selector, owner, lockToken.balanceOf(owner), 6_000_000_001 * 1e18
             )
         );
         lockToken.transfer(accountOne, 6_000_000_001 * 1e18);
@@ -66,10 +56,7 @@ contract LockTokenTest is Test {
         lockToken.initialize("LockToken", "LOCK", owner, operator);
         vm.expectRevert(
             abi.encodeWithSelector(
-                ERC20InsufficientAllowance.selector,
-                operator,
-                lockToken.allowance(owner, operator),
-                1000 * 1e18
+                ERC20InsufficientAllowance.selector, operator, lockToken.allowance(owner, operator), 1000 * 1e18
             )
         );
         vm.stopPrank();

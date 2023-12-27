@@ -5,25 +5,29 @@ import { getContracts } from "./utils/deploy-helper";
 async function main() {
   const contracts = getContracts(network.name)[network.name];
 
-  const LockToken = await ethers.getContractFactory("LockToken");
+  const IndexStaking = await ethers.getContractFactory("IndexStaking");
 
   //Upgrade proxy
-  const lockToken = await upgrades.upgradeProxy(contracts.lockToken, LockToken);
-  await lockToken.waitForDeployment();
-  console.log(`Upgraded Lock Token to ${lockToken.target}`);
+  const indexStaking = await upgrades.upgradeProxy(
+    contracts.indexStaking,
+    IndexStaking
+  );
+  await indexStaking.waitForDeployment();
+  console.log(`Upgraded Index Staking to ${indexStaking.target}`);
 
   // Get implementation address to verify
   const implementationAddress = await upgrades.erc1967.getImplementationAddress(
-    String(lockToken.target)
+    String(indexStaking.target)
   );
   console.log("Implementation contract address:", implementationAddress);
 
-  await run("verify:verify", {
-    address: implementationAddress,
-    constructorArguments: [],
-  });
-
-  console.log("Completed!");
+  setTimeout(async () => {
+    await run("verify:verify", {
+      address: implementationAddress,
+      constructorArguments: [],
+    });
+    console.log(`Complete!`);
+  }, 10000);
 }
 
 main()

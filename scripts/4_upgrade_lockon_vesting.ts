@@ -12,7 +12,7 @@ async function main() {
     contracts.lockonVesting,
     LockonVesting
   );
-  await lockonVesting.deployed();
+  await lockonVesting.waitForDeployment();
   console.log(`Upgraded Lockon Vesting to ${lockonVesting.target}`);
 
   // Get implementation address to verify
@@ -21,12 +21,14 @@ async function main() {
   );
   console.log("Implementation contract address:", implementationAddress);
 
-  await run("verify:verify", {
-    address: implementationAddress,
-    constructorArguments: [],
-  });
+  setTimeout(async () => {
+    await run("verify:verify", {
+      address: implementationAddress,
+      constructorArguments: [],
+    });
+    console.log("Completed!");
+  }, 10000);
 
-  console.log("Completed!");
 }
 
 main()

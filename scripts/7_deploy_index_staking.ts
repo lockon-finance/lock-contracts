@@ -4,26 +4,37 @@ import { getContracts, saveContract } from "./utils/deploy-helper";
 
 async function main() {
   const contracts = getContracts(network.name)[network.name];
-
-  const LockonVesting = await ethers.getContractFactory("LockonVesting");
-  const lockonVesting = await upgrades.deployProxy(
-    LockonVesting,
-    [contracts.ownerAddress, contracts.lockToken],
+  const IndexStaking = await ethers.getContractFactory("IndexStaking");
+  const indexStaking = await upgrades.deployProxy(
+    IndexStaking,
+    [
+      contracts.ownerAddress,
+      contracts.operatorAddress,
+      contracts.lockonVesting,
+      contracts.lockToken,
+      BigInt(2 * 10 ** 9) * BigInt(10 ** 18), // Number of lock tokens to use as index staking reward
+      "INDEX_STAKING", 
+      "1",
+      [
+        [contracts.LPIToken, Math.floor(Date.now() / 1000)], // First pool info
+        [contracts.LBIToken, Math.floor(Date.now() / 1000)]
+      ], // Second pool info
+    ],
     {
       kind: "uups",
     }
   );
 
-  await lockonVesting.waitForDeployment();
+  await indexStaking.waitForDeployment();
   console.log(
-    "Lockon Vesting contract deployed to address:",
-    lockonVesting.target
+    "Index Staking contract deployed to address:",
+    indexStaking.target
   );
-  saveContract(network.name, "lockonVesting", lockonVesting.target);
+  saveContract(network.name, "indexStaking", indexStaking.target);
 
   // Get implementation address to verify
   const implementationAddress = await upgrades.erc1967.getImplementationAddress(
-    String(lockonVesting.target)
+    String(indexStaking.target)
   );
   console.log("Implementation contract address:", implementationAddress);
 
@@ -34,7 +45,6 @@ async function main() {
     });
     console.log(`Complete!`);
   }, 10000);
-
 }
 
 // We recommend this pattern to be able to use async/await everywhere

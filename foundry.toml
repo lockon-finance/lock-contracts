@@ -4,3 +4,5 @@ out = "out"
 libs = ['lib']
 test = 'test'
 cache_path  = 'forge-cache'
+solc = "0.8.23"
+

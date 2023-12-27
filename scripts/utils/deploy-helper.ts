@@ -8,7 +8,7 @@ export function getContracts(network: any) {
     json = fs.readFileSync(
       path.join(
         __dirname,
-        `../deployed-addresses/${env}.${network}.contract-addresses.json`
+        `../../deployed-addresses/${env}.${network}.contract-addresses.json`
       )
     );
   } catch (err) {
@@ -31,7 +31,7 @@ export function saveContract(
   fs.writeFileSync(
     path.join(
       __dirname,
-      `../deployed-addresses/${env}.${network}.contract-addresses.json`
+      `../../deployed-addresses/${env}.${network}.contract-addresses.json`
     ),
     JSON.stringify(addresses, null, "    ")
   );

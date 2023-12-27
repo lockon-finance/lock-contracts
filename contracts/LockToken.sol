@@ -1,7 +1,10 @@
 //SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity ^0.8.21;
+pragma solidity ^0.8.23;
+
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
  * @title LockToken
@@ -9,7 +12,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
  *
  * Standard ERC20 Token contract with total supply is fixed at 100oku with upgradeable ability
  */
-contract LockToken is Initializable, ERC20Upgradeable {
+contract LockToken is Initializable, OwnableUpgradeable, ERC20Upgradeable, UUPSUpgradeable {
     /* ============ Constants ============== */
 
     // Maximum supply of Lock Token
@@ -25,14 +28,14 @@ contract LockToken is Initializable, ERC20Upgradeable {
      * @param ownerAddress    Address of the owner of this contract
      * @param operatorAddress Address of the operator
      */
-    function initialize(
-        string memory name,
-        string memory symbol,
-        address ownerAddress,
-        address operatorAddress
-    ) public initializer {
+    function initialize(string memory name, string memory symbol, address ownerAddress, address operatorAddress)
+        public
+        initializer
+    {
         // Initialize the ERC20 token with the provided name and symbol
         __ERC20_init_unchained(name, symbol);
+        // Initialize the contract's owner
+        __Ownable_init_unchained(ownerAddress);
         // Calculate the amount of tokens to mint to the owner (60% of MAX_SUPPLY)
         uint256 amountMintToOwner = (MAX_SUPPLY * 6000) / BASE_DENOMINATOR;
         // Calculate the amount of tokens to mint to the operator (40% of MAX_SUPPLY)
@@ -40,9 +43,12 @@ contract LockToken is Initializable, ERC20Upgradeable {
 
         // Mint tokens to the owner and operator according to the calculated amounts
         _mint(ownerAddress, amountMintToOwner * (10 ** uint256(decimals())));
-        _mint(
-            operatorAddress,
-            amountMintToOperator * (10 ** uint256(decimals()))
-        );
+        _mint(operatorAddress, amountMintToOperator * (10 ** uint256(decimals())));
     }
+
+    /**
+     * @dev Override function from UUPS contract for upgrade authorize
+     * @param newImplementation  Address of the new implementation address
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 }

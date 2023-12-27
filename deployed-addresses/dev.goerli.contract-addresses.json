@@ -1,6 +1,9 @@
 {
-  "goerli": {
-    "ownerAddress": "0xE94219d3368C061618eF370E108b3795F5081C70",
-    "operatorAddress": "0xE94219d3368C061618eF370E108b3795F5081C70"
-  }
+    "goerli": {
+        "ownerAddress": "0xD3B2e605Dd77144F99f52B1303E7D0bCd63285a3",
+        "operatorAddress": "0xD3B2e605Dd77144F99f52B1303E7D0bCd63285a3",
+        "feeReceiver": "0xD3B2e605Dd77144F99f52B1303E7D0bCd63285a3",
+        "lockToken": "0xa36AF4081275C73fEb026e46f48e7278FfcaEAeE",
+        "lockonVesting": "0x85a1a871786f90d336909cE939053Fa0969a46D9"
+    }
 }

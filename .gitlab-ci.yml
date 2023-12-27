@@ -22,4 +22,4 @@ check:
     - forge build --sizes
     - forge test -vvv
     - forge coverage
-  coverage:  /Total\s([^\|]*\|\s+){2}(\d+.\d+)%/ # Total Statements (The last matching number is used.)
+  coverage: /Total\s([^\|]*\|\s+){2}(\d+.\d+)%/ # Total Statements (The last matching number is used.)

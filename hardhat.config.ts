@@ -13,7 +13,7 @@ const polygonApiKey = process.env.POLYGON_API_KEY;
 const ethereumApiKey = process.env.ETHEREUM_API_KEY;
 
 export const solidity = {
-  version: "0.8.21",
+  version: "0.8.23",
   settings: {
     optimizer: {
       enabled: true,
@@ -61,7 +61,7 @@ export const gasReporter = {
   currency: "USD",
 };
 export const etherscan = {
-  apiKey: ethereumApiKey,
+  apiKey: { goerli: ethereumApiKey, sepolia: ethereumApiKey, polygonMumbai: polygonApiKey }
 };
 export const mocha = {
   timeout: 50000,

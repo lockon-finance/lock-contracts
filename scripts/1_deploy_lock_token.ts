@@ -13,7 +13,7 @@ async function main() {
     contracts.operatorAddress,
   ]);
 
-  await lockToken.deployed();
+  await lockToken.waitForDeployment();
   console.log("Lock Token contract deployed to address:", lockToken.target);
   saveContract(network.name, "lockToken", lockToken.target);
 
