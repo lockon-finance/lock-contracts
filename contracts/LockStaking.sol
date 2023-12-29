@@ -11,8 +11,8 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import "./interfaces/ILockonVesting.sol";
 
 /**
- * @title Lock Staking contract
- * @author LOCKON protocol
+ * @title LOCK Staking contract
+ * @author LOCKON
  * @dev Allows users to stake LOCK Token and claim rewards
  *
  */
@@ -28,6 +28,7 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         uint256 lastBasicRate; // The basic rate of user when the tokens were last locked
         uint256 rewardDebt; // Reward debt. See explanation below.
         uint256 lockEndTimestamp; // Timestamp on which the lock duration end
+        uint256 cumulativePendingReward; // Pending reward accumulated each time an user deposit/withdraw/extend duration
     }
     // The staking logic is heavily inspired by SushiSwap’s MasterChef contract,
     // here is an explanation of the `rewardDebt` parameter:
@@ -36,16 +37,18 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     //
     //    pending reward = (user.score * rewardPerScore) - user.rewardDebt
     //
-    // Whenever a user add, extend or withdraws Lock tokens to contract. Here's what happens:
+    // Whenever a user add, extend or withdraws LOCK tokens to contract. Here's what happens:
     //   1. The contract's `rewardPerScore` (and `lastRewardTimestamp`) gets updated.
-    //   2. User receives the pending reward, this amount will be immediately
-    //       transferred to the vesting contract to create a vesting information.
+    //   2. Calculate user's pending reward, this amount will be accumulated in
+    //       user's `cumulativePendingReward`
     //   3. User's `lockedAmount` gets updated.
     //   4. User's `rewardDebt` gets updated.
 
     /* ============ Constants ============== */
     // Represents the scaling factor used in calculations
     uint256 public constant PRECISION = 1e12;
+    // Represents the category LOCK STAKING in the LOCKON vesting
+    uint256 public constant LOCK_STAKING_VESTING_CATEGORY_ID = 0;
 
     /* ============ State Variables ============ */
     // Address to receive penalty fee
@@ -145,7 +148,64 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     event UserLockScoreChanged(address indexed user, uint256 lockedScore);
 
     /**
-     * Initializes the Lock Staking contract
+     * Emitted when the LOCKON Vesting address is updated
+     *
+     * @param lockonVesting New LOCKON Vesting address
+     * @param timestamp Timestamp at which the address is updated
+     */
+    event LockonVestingUpdated(address lockonVesting, uint256 timestamp);
+
+    /**
+     * Emitted when the fee receiver is updated
+     *
+     * @param feeReceiver New fee receiver address
+     * @param timestamp Timestamp at which the address is updated
+     */
+    event FeeReceiverUpdated(address feeReceiver, uint256 timestamp);
+
+    /**
+     * Emitted when the basic rate divider is updated
+     *
+     * @param basicRateDivider New Value for basic rate divider
+     * @param timestamp Timestamp at which the address is updated
+     */
+    event BasicRateDividerUpdated(uint256 basicRateDivider, uint256 timestamp);
+
+    /**
+     * Emitted when the bonus rate per second is updated
+     *
+     * @param bonusRatePerSecond New value for bonus rate per second
+     * @param currentRewardAmount New value for current reward amount
+     * @param rewardPerScore New value for reward per score
+     * @param lastRewardTimestamp New value for last reward timestamp
+     * @param timestamp Timestamp at which the address is updated
+     */
+    event BonusRatePerSecondUpdated(
+        uint256 bonusRatePerSecond,
+        uint256 currentRewardAmount,
+        uint256 rewardPerScore,
+        uint256 lastRewardTimestamp,
+        uint256 timestamp
+    );
+
+    /**
+     * Emitted when the minimum lock duration is updated
+     *
+     * @param minimumLockDuration New value for minimum lock duration
+     * @param timestamp Timestamp at which the address is updated
+     */
+    event MinimumLockDurationUpdated(uint256 minimumLockDuration, uint256 timestamp);
+
+    /**
+     * Emitted when the penalty rate is updated
+     *
+     * @param penaltyRate New value for penalty rate
+     * @param timestamp Timestamp at which the address is updated
+     */
+    event PenaltyRateUpdated(uint256 penaltyRate, uint256 timestamp);
+
+    /**
+     * Initializes the LOCK Staking contract
      *
      * @param _owner      Address of the owner of this contract
      * @param _lockonVesting Address of the LOCKON Vesting contract
@@ -186,10 +246,6 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         // Set penalty rate currently fixed at 30%
         penaltyRate = 300_000_000_000;
         minimumLockDuration = 100 days;
-
-        // TODO: Remove this and add approve when claim
-        // Approve the LOCKON vesting contract to spend the reward token
-        lockToken.approve(lockonVesting, type(uint256).max);
     }
 
     // Function to receive Ether. msg.data must be empty
@@ -251,12 +307,11 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
 
     /**
      * @dev Calculates and returns the pending reward for a given user based on their deposited amount,
-     * the current reward rate per LOCK score, and the difference in block timestamps between the last
-     * reward calculation and the current block
+     * the current reward rate per LOCK score, the cumulative pending reward and the difference in block
+     * timestamps between the last reward calculation and the current block
      * Whenever an user add, extend or withdraws LOCK tokens . Here's what happens:
-     *   1. The pool's `rewardPerScore`, `currentRewardAmount` (and `lastRewardTimestamp`) gets updated
-     *   2. User receives the pending reward sent to his/her address
-     *   3. User's `rewardDebt` gets updated
+     *   1. The pool's `rewardPerScore` gets updated
+     *   2. User receives the pending reward amount that can be sent to his/her address
      * @param _user User address
      */
     function pendingReward(address _user) external view returns (uint256) {
@@ -269,7 +324,7 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
             _rewardPerScore = _rewardPerScore + ((lockReward * PRECISION) / totalLockScore);
         }
         // Calculate and return the pending reward for the user
-        return ((user.lockScore * _rewardPerScore) / PRECISION) - user.rewardDebt;
+        return user.cumulativePendingReward + ((user.lockScore * _rewardPerScore) / PRECISION) - user.rewardDebt;
     }
 
     /* ============ Public Functions ============ */
@@ -293,7 +348,7 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         // Calculate the reward multiplier based on the difference in block timestamps
         uint256 lockReward = getRewardMultiplier(lastRewardTimestamp, block.timestamp);
         // Ensure that the reward supply is sufficient for the calculated rewards
-        require(rewardSupply >= lockReward, "Lock Staking: Reward distributed exceed supply");
+        require(rewardSupply >= lockReward, "LOCK Staking: Reward distributed exceed supply");
 
         // Update state data
         rewardPerScore = rewardPerScore + ((lockReward * PRECISION) / totalLockScore);
@@ -311,9 +366,9 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      */
     function addLockToken(uint256 _lockAmount, uint256 _lockDuration) external whenNotPaused {
         uint256 now_ = block.timestamp;
-        require(_lockAmount > 0, "Lock Staking: Locked amount must be greater than 0");
-        require(_lockDuration >= minimumLockDuration, "Lock Staking: Minimum lock duration does not meet");
-        require(now_ >= startTimestamp, "Lock Staking: Staking not start");
+        require(_lockAmount > 0, "LOCK Staking: Locked amount must be greater than 0");
+        require(_lockDuration >= minimumLockDuration, "LOCK Staking: Minimum lock duration does not meet");
+        require(now_ >= startTimestamp, "LOCK Staking: Staking not start");
 
         updatePool();
 
@@ -323,10 +378,7 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         if (_currentUserInfo.lockScore > 0) {
             uint256 pending = ((_currentUserInfo.lockScore * rewardPerScore) / PRECISION) - _currentUserInfo.rewardDebt;
             if (pending > 0) {
-                // TODO: Remove auto add vesting
-                ILockonVesting(lockonVesting).addVestingWallet(
-                    msg.sender, pending, ILockonVesting.VestingTag.LOCK_STAKING_ADD
-                );
+                _currentUserInfo.cumulativePendingReward += pending;
             }
             totalLockScore -= _currentUserInfo.lockScore;
         }
@@ -375,17 +427,14 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      */
     function extendLockDuration(uint256 _lockDuration) external whenNotPaused {
         UserInfo storage _currentUserInfo = userInfo[msg.sender];
-        require(_currentUserInfo.lockedAmount > 0, "Lock Staking: Nothing to extend");
-        require(_lockDuration >= minimumLockDuration, "Lock Staking: Minimum lock duration does not meet");
+        require(_currentUserInfo.lockedAmount > 0, "LOCK Staking: Nothing to extend");
+        require(_lockDuration >= minimumLockDuration, "LOCK Staking: Minimum lock duration does not meet");
         updatePool();
 
         // Calculate previous reward amount
         uint256 pending = ((_currentUserInfo.lockScore * rewardPerScore) / PRECISION) - _currentUserInfo.rewardDebt;
-        if (pending > 0) {
-            // TODO: Remove auto add vesting
-            ILockonVesting(lockonVesting).addVestingWallet(
-                msg.sender, pending, ILockonVesting.VestingTag.LOCK_STAKING_EXTEND
-            );
+        if (pending != 0) {
+            _currentUserInfo.cumulativePendingReward += pending;
         }
 
         uint256 now_ = block.timestamp;
@@ -423,19 +472,16 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      */
     function withdrawLockToken(uint256 _amount) external whenNotPaused {
         UserInfo storage _currentUserInfo = userInfo[msg.sender];
-        require(_currentUserInfo.lockedAmount > 0, "Lock Staking: Nothing to withdraw");
-        require(_amount > 0, "Lock Staking: Withdraw amount must be greater than 0");
-        require(_currentUserInfo.lockedAmount >= _amount, "Lock Staking: Withdraw amount exceed available");
+        require(_currentUserInfo.lockedAmount != 0, "LOCK Staking: Nothing to withdraw");
+        require(_amount != 0, "LOCK Staking: Withdraw amount must be greater than 0");
+        require(_currentUserInfo.lockedAmount >= _amount, "LOCK Staking: Withdraw amount exceed available");
 
         updatePool();
 
         // Calculate previous reward amount
         uint256 pending = ((_currentUserInfo.lockScore * rewardPerScore) / PRECISION) - _currentUserInfo.rewardDebt;
-        if (pending > 0) {
-            // TODO: Remove auto add vesting
-            ILockonVesting(lockonVesting).addVestingWallet(
-                msg.sender, pending, ILockonVesting.VestingTag.LOCK_STAKING_WITHDRAW
-            );
+        if (pending != 0) {
+            _currentUserInfo.cumulativePendingReward += pending;
         }
 
         // Calculate user LOCK score after withdraw
@@ -461,7 +507,7 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         totalLockedAmount -= _amount;
 
         // Transfer the penalty fee to the validator's address
-        if (_penaltyFee != 0) lockToken.safeTransfer(feeReceiver, _penaltyFee);
+        lockToken.safeTransfer(feeReceiver, _penaltyFee);
         // Transfer the remaining locked tokens to the user
         lockToken.safeTransfer(msg.sender, _amount - _penaltyFee);
 
@@ -474,21 +520,21 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      */
     function claimPendingReward() external whenNotPaused {
         UserInfo storage _currentUserInfo = userInfo[msg.sender];
-        require(_currentUserInfo.lockScore > 0, "Lock Staking: Current score is zero");
-
         updatePool();
-
-        uint256 pending = ((_currentUserInfo.lockScore * rewardPerScore) / PRECISION) - _currentUserInfo.rewardDebt;
-        if (pending > 0) {
-            lockToken.approve(lockonVesting, pending);
-            ILockonVesting(lockonVesting).addVestingWallet(
-                msg.sender, pending, ILockonVesting.VestingTag.LOCK_STAKING_CLAIM
-            );
+        uint256 totalCumulativeReward = _currentUserInfo.cumulativePendingReward
+            + ((_currentUserInfo.lockScore * rewardPerScore) / PRECISION) - _currentUserInfo.rewardDebt;
+        if (totalCumulativeReward != 0) {
+            // Approve the LOCKON vesting contract to spend the cumulative reward token
+            lockToken.approve(lockonVesting, totalCumulativeReward);
+            ILockonVesting(lockonVesting).deposit(msg.sender, totalCumulativeReward, LOCK_STAKING_VESTING_CATEGORY_ID);
+            _currentUserInfo.cumulativePendingReward = 0;
         }
 
         _currentUserInfo.rewardDebt = (_currentUserInfo.lockScore * rewardPerScore) / PRECISION;
 
-        emit ClaimLockStakingReward(msg.sender, pending, (_currentUserInfo.lockScore * rewardPerScore) / PRECISION);
+        emit ClaimLockStakingReward(
+            msg.sender, totalCumulativeReward, (_currentUserInfo.lockScore * rewardPerScore) / PRECISION
+        );
     }
 
     /* ============ PRIVILEGED OWNER / GOVERNANCE Functions ============ */
@@ -514,8 +560,9 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      * @param _lockonVesting  Address of the LOCKON vesting contract
      */
     function setLockonVesting(address _lockonVesting) external onlyOwner {
-        require(_lockonVesting != address(0), "Lock Staking: Zero address not allowed");
+        require(_lockonVesting != address(0), "LOCK Staking: Zero address not allowed");
         lockonVesting = _lockonVesting;
+        emit LockonVestingUpdated(lockonVesting, block.timestamp);
     }
 
     /**
@@ -523,8 +570,9 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      * @param _feeReceiver  Address of the fee receiver
      */
     function setFeeReceiver(address _feeReceiver) external onlyOwner {
-        require(_feeReceiver != address(0), "Lock Staking: Zero address not allowed");
+        require(_feeReceiver != address(0), "LOCK Staking: Zero address not allowed");
         feeReceiver = _feeReceiver;
+        emit FeeReceiverUpdated(feeReceiver, block.timestamp);
     }
 
     /**
@@ -534,6 +582,7 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      */
     function setBasicRateDivider(uint256 _basicRateDivider) external onlyOwner {
         basicRateDivider = _basicRateDivider;
+        emit BasicRateDividerUpdated(basicRateDivider, block.timestamp);
     }
 
     /**
@@ -542,7 +591,11 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      * @param _bonusRatePerSecond The new value for the second bonus rate
      */
     function setBonusRatePerSecond(uint256 _bonusRatePerSecond) external onlyOwner {
+        updatePool();
         bonusRatePerSecond = _bonusRatePerSecond;
+        emit BonusRatePerSecondUpdated(
+            bonusRatePerSecond, currentRewardAmount, rewardPerScore, lastRewardTimestamp, block.timestamp
+        );
     }
 
     /**
@@ -552,6 +605,7 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      */
     function setMinimumLockDuration(uint256 _minimumLockDuration) external onlyOwner {
         minimumLockDuration = _minimumLockDuration;
+        emit MinimumLockDurationUpdated(minimumLockDuration, block.timestamp);
     }
 
     /**
@@ -561,6 +615,7 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      */
     function setPenaltyRate(uint256 _penaltyRate) external onlyOwner {
         penaltyRate = _penaltyRate;
+        emit PenaltyRateUpdated(penaltyRate, block.timestamp);
     }
 
     function _calculateLockTimestamp(uint256 currentLockEnd, uint256 newDuration, uint256 now_)
@@ -570,7 +625,7 @@ contract LockStaking is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     {
         if (currentLockEnd > now_) {
             uint256 durationLeft = currentLockEnd - now_;
-            require(newDuration >= durationLeft, "Lock Staking: Invalid lock duration");
+            require(newDuration >= durationLeft, "LOCK Staking: Invalid lock duration");
         }
         return (now_ + newDuration, newDuration);
     }

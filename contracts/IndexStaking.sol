@@ -14,7 +14,7 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
 import "./interfaces/ILockonVesting.sol";
 /**
  * @title Index Staking contract
- * @author LOCKON protocol
+ * @author LOCKON
  * @dev A contract that allows users to participate in staking pools to earn rewards.
  * The contract is designed to facilitate the staking of various ERC-20 tokens
  *
@@ -29,6 +29,11 @@ contract IndexStaking is
     ReentrancyGuardUpgradeable
 {
     using SafeERC20 for IERC20;
+    /* ============ Constants ============== */
+    // Represents the category INDEX STAKING in the LOCKON vesting
+
+    uint256 public constant INDEX_STAKING_VESTING_CATEGORY_ID = 1;
+
     /* ============ Struct ============ */
 
     // Information about each user's staking in a specific pool
@@ -45,7 +50,7 @@ contract IndexStaking is
         uint256 startTimestamp; // The timestamp at which staking in the pool starts
     }
 
-    //
+    // Information about user's claim request
     struct ClaimRequest {
         string requestId; // An ID for the staking reward claim request
         address beneficiary; // The address of the beneficiary of the staking reward
@@ -55,7 +60,7 @@ contract IndexStaking is
 
     /* ============ Mappings ============ */
 
-    // Mark the order as canceled
+    // Mark the order as cancelled
     mapping(string => bool) public isStakingClaimed;
 
     /* ============ State Variables ============ */
@@ -71,7 +76,7 @@ contract IndexStaking is
     // Current amount of reward used to pay for user staking's reward
     uint256 public currentRewardAmount;
     // A mapping to track PoolInfo struct for each stake token address
-    mapping(address => PoolInfo) tokenPoolInfo; // TODO should: Declare visibility modifiers explicitly.
+    mapping(address => PoolInfo) public tokenPoolInfo; // TODO should: Can we use a type that doesn't include the unnecessary `totalStakedAmount` property for initialization?
     // A mapping to track UserInfo for each user in each pool
     mapping(address => mapping(address => UserInfo)) public userInfo;
     // Track the status of each requestId
@@ -127,6 +132,22 @@ contract IndexStaking is
     event ClaimOrderCancel(address indexed sender, string requestId, address stakeToken);
 
     /**
+     * Emitted when the LOCKON Vesting address is updated
+     *
+     * @param lockonVesting New LOCKON Vesting address
+     * @param timestamp Timestamp at which the address is updated
+     */
+    event LockonVestingAddressUpdated(address lockonVesting, uint256 timestamp);
+
+    /**
+     * Emitted when the validator address is updated
+     *
+     * @param validator New Validator address
+     * @param timestamp Timestamp at which the address is updated
+     */
+    event ValidatorAddressUpdated(address validator, uint256 timestamp);
+
+    /**
      * @dev Initializes the Index Staking contract with default pools
      *
      * @param _owner Address of the owner of this contract
@@ -146,7 +167,7 @@ contract IndexStaking is
         uint256 _currentRewardAmount,
         string memory _domainName,
         string memory _signatureVersion,
-        PoolInfo[] calldata pools // TODO should: Can we use a type that doesn't include the unnecessary `totalStakedAmount` property for initialization?
+        PoolInfo[] calldata pools
     ) external initializer {
         EIP712Upgradeable.__EIP712_init(_domainName, _signatureVersion);
         // Initialize the contract and set the owner
@@ -167,9 +188,6 @@ contract IndexStaking is
                 i++;
             }
         }
-        // TODO: Remove this and add approve when claim
-        // Approve for the contract vesting
-        lockToken.approve(lockonVesting, type(uint256).max);
     }
 
     // Function to receive Ether. msg.data must be empty
@@ -266,10 +284,10 @@ contract IndexStaking is
         lastRewardDistributionTime = block.timestamp;
         // Subtract the currentReward
         currentRewardAmount -= _claimAmount;
+        // Approve for the contract vesting
+        lockToken.approve(lockonVesting, _claimAmount);
         // Transfer the reward tokens from the validator to the recipient
-        ILockonVesting(lockonVesting).addVestingWallet(
-            msg.sender, _claimAmount, ILockonVesting.VestingTag.INDEX_STAKING_CLAIM
-        );
+        ILockonVesting(lockonVesting).deposit(msg.sender, _claimAmount, INDEX_STAKING_VESTING_CATEGORY_ID);
 
         emit IndexStakingRewardClaimed(msg.sender, _requestId, _stakeToken, _claimAmount);
     }
@@ -298,7 +316,7 @@ contract IndexStaking is
             getSignerForRequest(_requestId, msg.sender, _stakeToken, _claimAmount, _signature) == validatorAddress,
             "Index Staking: Invalid signature"
         );
-        // Mark the order as canceled
+        // Mark the order as cancelled
         isRequestIdProcessed[_requestId] = true;
 
         emit ClaimOrderCancel(msg.sender, _requestId, _stakeToken);
@@ -323,12 +341,13 @@ contract IndexStaking is
     }
 
     /**
-     * @dev Set the address of Lockon Vesting contract responsible for vested distributed reward
-     * @param _lockonVesting  Address of the lockon vesting contract
+     * @dev Set the address of LOCKON Vesting contract responsible for vested distributed reward
+     * @param _lockonVesting  Address of the LOCKON vesting contract
      */
     function setLockonVesting(address _lockonVesting) external onlyOwner {
         require(_lockonVesting != address(0), "Index Staking: Zero address not allowed");
         lockonVesting = _lockonVesting;
+        emit LockonVestingAddressUpdated(lockonVesting, block.timestamp);
     }
 
     /**
@@ -338,6 +357,7 @@ contract IndexStaking is
     function setValidatorAddress(address _validatorAddress) external onlyOwner {
         require(_validatorAddress != address(0), "Index Staking: Zero address not allowed");
         validatorAddress = _validatorAddress;
+        emit ValidatorAddressUpdated(validatorAddress, block.timestamp);
     }
 
     /**
@@ -383,7 +403,6 @@ contract IndexStaking is
         view
         returns (address)
     {
-        // TODO: Add check claim amount to prevent hacking
         bytes32 digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(

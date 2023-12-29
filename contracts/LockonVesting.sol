@@ -6,51 +6,67 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-
-import "./interfaces/ILockonVesting.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
- * @title Lockon Vesting contract
- * @author LOCKON protocol
+ * @title LOCKON Vesting contract
+ * @author LOCKON
  * @dev An ownable contract that can receive ERC20 LOCK tokens, and release these assets to the specified
  * wallet address, also referred to as "beneficiary", according to a vesting schedule.
  *
+ * There are currently 4 vesting categories: LOCK STAKING, INDEX STAKING, AIRDROP and OTHER. Each user will
+ * have up to 4 vesting wallets corresponding to these categories.
+ *
  * Any assets transferred to this contract will follow the vesting schedule as if they were locked from
- * the beginning. Consequently, if the vesting has already started, any amount of tokens sent to this
- * contract will (at least partly) be immediately releasable.
+ * the beginning. Each time user deposit LOCK tokens to their vesting wallet, the vesting schedule will reset.
  *
  * NOTE:  Since the contract is {Ownable}, only wallet address that has ownership can create new vesting
  * schedule for new wallet (ownership can be transferred)
  *
  */
-
-// TODO: Update all functions in contract vesting following GMX
-contract LockonVesting is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract LockonVesting is
+    Initializable,
+    OwnableUpgradeable,
+    UUPSUpgradeable,
+    ReentrancyGuardUpgradeable,
+    PausableUpgradeable
+{
     using SafeERC20 for IERC20;
-
     /* ============ Vesting Struct ============ */
 
     struct VestingWallet {
-        address vestingAddress; // The address of the vesting wallet
-        uint256 vestedAmount; // The total amount of tokens granted for vesting
-        uint256 releasedAmount; // The amount of tokens already released from vesting
-        uint256 vestingStartTime; // The starting time of the vesting period
-        ILockonVesting.VestingTag vestingTag; // A custom tag associated with the vesting
+        address userAddress; // The address of the user initiates the vesting
+        uint256 vestingAmount; // The total amount of tokens granted for vesting
+        uint256 claimableAmount; // The total amount of tokens user can claim
+        uint256 claimedAmount; // The amount of tokens already released from vesting based on current schedule
+        uint256 startTime; // The starting time of the vesting period
+        uint256 categoryId; // A category id associated with the vesting
     }
 
     /* ============ State Variables ============ */
-    // Vesting duration
-    uint256 public vestingDuration;
-    // Address of the Lock Staking contract
-    address public lockStakingContract;
-    // Address of the Index Staking contract
-    address public indexStakingContract;
-    uint256 private _currentVestingId;
-    // Mapping of vesting ID to VestingWallet struct, which stores information about vesting schedules
-    mapping(uint256 => VestingWallet) public vestingWallet;
-    // Mapping of vesting wallet address to a list of vesting IDs that have been allocated to it
-    mapping(address => uint256[]) private userVestingIds;
-    // Interface of the Lock token contract
+    /**
+     * Mapping of vesting category id to its vesting schedule
+     *
+     * Ex: category id 0 represents category LOCK STAKING, has a vesting schedule of 100 days
+     * => categoryId[0] = 100 days;
+     */
+    mapping(uint256 => uint256) public vestingCategories;
+    // Mapping of user address to VestingWallet struct based on vesting category id, which stores vesting information
+    mapping(address => mapping(uint256 => VestingWallet)) public userVestingWallet;
+    // Mapping that keeps track of whether each address is allowed to receive to deposit to LOCKON Vesting contract
+    mapping(address => bool) public isAllowedDeposit;
+    // Mapping that keeps track of whether each address is banned from all activities in LOCKON Vesting
+    mapping(address => bool) public isBlacklistUser;
+    // List address allowed to receive to deposit to LOCKON Vesting contract
+    address[] public listAllowedDeposit;
+    // Mapping that keeps track each user address index in the list allowed deposit address
+    mapping(address => uint256) private allowedDepositOneBasedIndexes;
+    // List address banned from any activities in LOCKON Vesting, only owner can see this
+    address[] private blacklist;
+    // Mapping that keeps track each user address index in the blacklist
+    mapping(address => uint256) private blacklistOneBasedIndexes;
+    // Interface of the LOCK token contract
     IERC20 public lockToken;
 
     /* ============ Events ============ */
@@ -59,38 +75,62 @@ contract LockonVesting is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * Emitted when a new vesting wallet is added
      *
      * @param sender Address of the function executor
-     * @param vestingAddress Address of the newly added vesting wallet
-     * @param amount Total granted amount for vesting
-     * @param vestingStartTime Starting time of the new vesting
-     * @param vestingId Identifier for the vesting wallet
-     * @param vestingTag A custom tag associated with the vesting
+     * @param user Address of the user who owns vesting
+     * @param depositAmount Amount token deposited for vesting
+     * @param vestingAmount Total granted amount for vesting
+     * @param startTime Starting time of the new vesting
+     * @param categoryId A category id associated with the vesting schedule
      */
-    event VestingWalletAdded(
+    event VestingDeposited(
         address indexed sender,
-        address vestingAddress,
-        uint256 amount,
-        uint256 vestingStartTime,
-        uint256 vestingId,
-        ILockonVesting.VestingTag vestingTag
+        address user,
+        uint256 depositAmount,
+        uint256 vestingAmount,
+        uint256 startTime,
+        uint256 categoryId
     );
 
     /**
      * Emitted when a user claims vested tokens
      *
      * @param sender Address of the function executor
-     * @param vestingIds List of the vesting wallet identifiers
-     * @param releasedAmount Amount of tokens released to the user
+     * @param categoryId A category id associated with the vesting schedule
+     * @param claimedAmount Amount of tokens user claimed
      */
-    event UserClaimedVesting(address indexed sender, uint256[] vestingIds, uint256 releasedAmount);
+    event VestingClaimed(address indexed sender, uint256 categoryId, uint256 claimedAmount);
 
     /**
-     * @dev Modifier that allows only the associated staking contracts to call certain functions along with owner
+     * Emitted when an address is added or removed from list allowed deposit address
+     *
+     * @param addr address
+     * @param depositPermission status for checking if address can deposit to LOCKON Vesting
+     * @param timestamp Timestamp at which the address is added or removed
      */
-    modifier onlyStakingContractOrOwner() {
-        require(
-            msg.sender == lockStakingContract || msg.sender == indexStakingContract || msg.sender == owner(),
-            "Lockon Vesting: Forbidden"
-        );
+    event DepositPermissionStatusUpdated(address addr, bool depositPermission, uint256 timestamp);
+
+    /**
+     * Emitted when an address is banned from activities
+     *
+     * @param addr address
+     * @param isBanned status for checking if address is banned
+     * @param timestamp Timestamp at which the address is banned
+     */
+    event UserBlacklistUserAdded(address addr, bool isBanned, uint256 timestamp);
+
+    /**
+     * Emitted when an address is unbanned from activities
+     *
+     * @param addr address
+     * @param isBanned status for checking if address is banned
+     * @param timestamp Timestamp at which the address is unbanned
+     */
+    event UserBlacklistUserRemoved(address addr, bool isBanned, uint256 timestamp);
+
+    /**
+     * @dev Modifier that only owner and address that allowed to deposit can call certain functions
+     */
+    modifier onlyDepositGrantedOrOwner() {
+        require(isAllowedDeposit[msg.sender] || msg.sender == owner(), "LOCKON Vesting: Forbidden");
         _;
     }
 
@@ -105,170 +145,255 @@ contract LockonVesting is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __Ownable_init_unchained(_owner);
 
         lockToken = IERC20(_lockToken);
-        vestingDuration = 300 days;
+        vestingCategories[0] = 300 days; // index 0 represents category LOCK STAKING
+        vestingCategories[1] = 300 days; // index 1 represents category INDEX STAKING
+        vestingCategories[2] = 300 days; // index 2 represents category AIRDROP
     }
 
     // Function to receive Ether. msg.data must be empty
     receive() external payable {}
 
-    /* ============ View Functions ============ */
-
-    /**
-     * @dev Return all vesting ID that has been allocation to a specific address that is still in vesting
-     */
-    function getActiveVestingIdsForAddress(address _vestingAddress)
-        public
-        view
-        returns (uint256[] memory, ILockonVesting.VestingTag[] memory)
-    {
-        uint256[] memory vestingIds = userVestingIds[_vestingAddress];
-        uint256 len = vestingIds.length;
-        ILockonVesting.VestingTag[] memory vestingTags = new ILockonVesting.VestingTag[](len);
-
-        for (uint256 i; i < len;) {
-            vestingTags[i] = vestingWallet[vestingIds[i]].vestingTag;
-
-            unchecked {
-                i++;
-            }
-        }
-
-        return (vestingIds, vestingTags);
-    }
-
     /**
      * @dev This view function returns a specific timestamp at which vesting process end.
+     *
+     * @param user Address of the user initiates the vesting
+     * @param categoryId A category id associated with the vesting schedule
      */
-    function getVestingEndTime(uint256 _vestingId) public view returns (uint256) {
-        require(_vestingId <= _currentVestingId, "Lockon Vesting: Invalid vesting id");
-        return vestingWallet[_vestingId].vestingStartTime + vestingDuration;
+    function getVestingEndTime(address user, uint256 categoryId) public view returns (uint256) {
+        return userVestingWallet[user][categoryId].startTime + vestingCategories[categoryId];
     }
 
     /**
-     * @dev Calculates the amount of lock tokens that can be released, based on the elapsed time and its historical
-     * allocation.
+     * @dev Calculates the total claimable amount of LOCK tokens, based on the elapsed time
      *
-     * @param _vestingId ID of the vesting
-     * @return The amount of tokens that can be released
+     * @param user Address of the user initiates the vesting
+     * @param categoryId A category id associated with the vesting schedule
+     * @return The amount of tokens that can be claimed
      */
-    function releasable(uint256 _vestingId) public view returns (uint256) {
-        VestingWallet memory vestingInfo = vestingWallet[_vestingId];
-        uint256 currentTime = block.timestamp;
-        if (currentTime <= vestingInfo.vestingStartTime) {
+    function currentTotalClaimable(address user, uint256 categoryId) external view returns (uint256) {
+        VestingWallet storage vestingInfo = userVestingWallet[user][categoryId];
+        if (vestingInfo.vestingAmount == 0) {
             return 0;
-        } else if (currentTime > getVestingEndTime(_vestingId)) {
-            return vestingInfo.vestedAmount - vestingInfo.releasedAmount;
-        } else {
-            return ((vestingInfo.vestedAmount * (currentTime - vestingInfo.vestingStartTime)) / vestingDuration)
-                - (vestingInfo.releasedAmount);
         }
+
+        uint256 timeDiff = block.timestamp - vestingInfo.startTime;
+        uint256 claimableAmount = (vestingInfo.vestingAmount * timeDiff / vestingCategories[categoryId]);
+
+        if (claimableAmount < vestingInfo.vestingAmount) {
+            return vestingInfo.claimableAmount + claimableAmount - vestingInfo.claimedAmount;
+        }
+
+        return vestingInfo.claimableAmount + vestingInfo.vestingAmount - vestingInfo.claimedAmount;
     }
 
     /**
-     * @dev Calculates the amount of lock tokens that can be released for multiple vesting ids
+     * @dev Calculates the cumulative amount of LOCK tokens vested in the current vesting schedule
      *
-     * @param _vestingIds IDs of the vesting
+     * @param user Address of the user initiates the vesting
+     * @param categoryId A category id associated with the vesting schedule
+     * @return The cumulative amount of LOCK tokens vested in the current schedule
      */
-    function releasables(uint256[] calldata _vestingIds) public view returns (uint256 totalReleasable) {
-        uint256 len = _vestingIds.length;
-        for (uint256 i; i < len;) {
-            totalReleasable += releasable(_vestingIds[i]);
-
-            unchecked {
-                i++;
-            }
+    function _claimable(address user, uint256 categoryId) internal view returns (uint256) {
+        VestingWallet storage vestingInfo = userVestingWallet[user][categoryId];
+        if (vestingInfo.vestingAmount == 0) {
+            return 0;
         }
+
+        uint256 timeDiff = block.timestamp - vestingInfo.startTime;
+        uint256 claimableAmount = (vestingInfo.vestingAmount * timeDiff / vestingCategories[categoryId]);
+
+        if (claimableAmount < vestingInfo.vestingAmount) {
+            return claimableAmount;
+        }
+
+        return vestingInfo.vestingAmount;
     }
 
     /* ============ External Functions ============ */
 
     /**
-     * @notice PRIVILEGED OWNER FUNCTION: Add a new vesting wallet to the Lockon Vesting contract
+     * @notice "PRIVILEGED FUNCTION: Add a new token amount for vesting and start a new
+     * vesting schedule in the LOCKON Vesting contract"
      *
-     * @param _vestingAddress Address of the vesting wallet to add
-     * @param _amount Total vested amount
-     * @param _vestingTag Description about the vesting
+     * @param user Address of the user applying the vesting
+     * @param amount The amount of token deposited for vesting
+     * @param categoryId A category id associated with the vesting schedule
      */
-    function addVestingWallet(address _vestingAddress, uint256 _amount, ILockonVesting.VestingTag _vestingTag)
+    function deposit(address user, uint256 amount, uint256 categoryId)
         external
-        onlyStakingContractOrOwner
+        onlyDepositGrantedOrOwner
+        whenNotPaused
     {
-        require(_amount > 0, "Lockon Vesting: Vesting amount must be greater than 0");
-        require(_vestingAddress != address(0), "Lockon Vesting: Zero address not allowed");
+        require(!isBlacklistUser[user], "LOCKON Vesting: User has been banned from all activities in LOCKON Vesting");
+        require(amount != 0, "LOCKON Vesting: Vesting amount must be greater than 0");
+        require(user != address(0), "LOCKON Vesting: Zero address not allowed");
 
-        // Increase vesting id
-        _currentVestingId++;
-        uint256 newVestingId = _currentVestingId;
-        // Create a new VestingWallet struct to store the wallet's information
-        vestingWallet[newVestingId] = VestingWallet(_vestingAddress, _amount, 0, block.timestamp, _vestingTag);
-        // Update the list of vesting IDs for the vesting wallet's address
-        userVestingIds[_vestingAddress].push(newVestingId);
-        // Transfer the vested tokens from the owner to this contract
-        lockToken.safeTransferFrom(msg.sender, address(this), _amount);
+        VestingWallet storage vestingInfo = userVestingWallet[user][categoryId];
+        uint256 claimableAmount = _claimable(user, categoryId);
+        // Calculate based on the cumulative claimable vested amount of the current vesting and the previous
+        // vesting schedules and deduct the vested amount user had claimed in the current vesting
+        vestingInfo.claimableAmount = claimableAmount + vestingInfo.claimableAmount - vestingInfo.claimedAmount;
+        // Calculate vesting amount based on new amount and the remaining
+        vestingInfo.vestingAmount = vestingInfo.vestingAmount + amount - claimableAmount;
+        // Start a new vesting schedule
+        vestingInfo.startTime = block.timestamp;
+        vestingInfo.claimedAmount = 0;
 
-        emit VestingWalletAdded(msg.sender, _vestingAddress, _amount, block.timestamp, newVestingId, _vestingTag);
+        lockToken.safeTransferFrom(msg.sender, address(this), amount);
+
+        emit VestingDeposited(msg.sender, user, amount, vestingInfo.vestingAmount, vestingInfo.startTime, categoryId);
     }
 
     /**
-     * Allows a user to claim vested tokens from a specific vesting wallet
+     * Allows user to claim all vested tokens
      *
-     * @param _vestingIds Ids of the vesting wallet from which tokens are to be claimed
+     * @param categoryId A category id associated with the vesting schedule
      */
-    function userClaimVesting(uint256[] calldata _vestingIds) external {
-        // Keep track of the total claim amount of tokens
-        uint256 totalClaim;
-        uint256 length = _vestingIds.length;
-        uint256 curVestingId = _currentVestingId;
-        for (uint256 i; i < length;) {
-            uint256 vestingId = _vestingIds[i];
-            // Retrieve vesting information for the specified vesting wallet
-            require(vestingId <= curVestingId, "Lockon Vesting: Invalid vesting id");
-            // Check the amount of tokens that can be claimed
-            uint256 _releasable = releasable(vestingId);
-            if (_releasable > 0) {
-                VestingWallet storage vestingInfo = vestingWallet[vestingId];
-                require(msg.sender == vestingInfo.vestingAddress, "Lockon Vesting: Unauthorized to claim");
-                // Update the released amount in the vesting information
-                vestingInfo.releasedAmount += _releasable;
-                totalClaim += _releasable;
-            }
+    function claim(uint256 categoryId) external nonReentrant whenNotPaused {
+        require(
+            !isBlacklistUser[msg.sender], "LOCKON Vesting: User has been banned from all activities in LOCKON Vesting"
+        );
+        uint256 claimableAmount = _claimable(msg.sender, categoryId);
+        VestingWallet storage vestingInfo = userVestingWallet[msg.sender][categoryId];
+        require(
+            claimableAmount != 0 || (vestingInfo.claimableAmount - vestingInfo.claimedAmount != 0),
+            "LOCKON Vesting: User has nothing to claim"
+        );
+
+        // Calculate based on the cumulative claimable vested amount of the current vesting and the previous
+        // vesting schedules and deduct the vested amount user had claimed in the current vesting
+        uint256 totalTokenClaim = claimableAmount + vestingInfo.claimableAmount - vestingInfo.claimedAmount;
+        vestingInfo.claimedAmount = claimableAmount;
+        // Reset the cumulative claimable vested amount
+        vestingInfo.claimableAmount = 0;
+
+        lockToken.safeTransfer(msg.sender, totalTokenClaim);
+
+        emit VestingClaimed(msg.sender, categoryId, totalTokenClaim);
+    }
+
+    /* ============ PRIVILEGED OWNER / GOVERNANCE Functions ============ */
+    /**
+     * @dev Add address to list allowed deposit address
+     * @param _addr Address
+     */
+    function addAddressDepositPermission(address _addr) external onlyOwner {
+        require(_addr != address(0), "LOCKON Vesting: Zero address not allowed");
+        require(
+            !isAllowedDeposit[_addr],
+            "LOCKON Vesting: List allowed deposit address already contains this address"
+        );
+        listAllowedDeposit.push(_addr);
+        allowedDepositOneBasedIndexes[_addr] = listAllowedDeposit.length;
+        isAllowedDeposit[_addr] = true;
+        emit DepositPermissionStatusUpdated(_addr, isAllowedDeposit[_addr], block.timestamp);
+    }
+
+    /**
+     * @dev Remove address from list allowed deposit address
+     * @param _addr Address
+     */
+    function removeAddressDepositPermission(address _addr) external onlyOwner {
+        require(_addr != address(0), "LOCKON Vesting: Zero address not allowed");
+        require(
+            isAllowedDeposit[_addr],
+            "LOCKON Vesting: List allowed deposit address does not contain this address"
+        );
+        uint256 len = listAllowedDeposit.length;
+        uint256 index = allowedDepositOneBasedIndexes[_addr];
+        address lastValue = listAllowedDeposit[len - 1];
+        listAllowedDeposit[index - 1] = lastValue;
+        allowedDepositOneBasedIndexes[lastValue] = index;
+        // delete the index
+        delete allowedDepositOneBasedIndexes[_addr];
+        listAllowedDeposit.pop();
+        isAllowedDeposit[_addr] = false;
+        emit DepositPermissionStatusUpdated(_addr, isAllowedDeposit[_addr], block.timestamp);
+    }
+
+    /**
+     * @dev Get list allowed deposit address
+     */
+    function getListAllowedDeposit() external view returns (address[] memory) {
+        return listAllowedDeposit;
+    }
+
+    /**
+     * @dev Set the vesting category list with its schedule
+     *
+     * @param _vestingCategoryIds The new category id list
+     * @param _vestingCategoryValues The new list value for each vesting category id
+     */
+    function setVestingCategories(uint256[] calldata _vestingCategoryIds, uint256[] calldata _vestingCategoryValues)
+        external
+        onlyOwner
+    {
+        uint256 listIdLen = _vestingCategoryIds.length;
+        require(
+            _vestingCategoryValues.length == listIdLen,
+            "The list for category ID and category value must have equal length"
+        );
+        for (uint256 i; i < listIdLen;) {
+            vestingCategories[_vestingCategoryIds[i]] = _vestingCategoryValues[i];
             unchecked {
                 i++;
             }
         }
-        // Transfer the claimed tokens to the vesting wallet
-        lockToken.safeTransfer(msg.sender, totalClaim);
-
-        emit UserClaimedVesting(msg.sender, _vestingIds, totalClaim);
-    }
-
-    /* ============ PRIVILEGED OWNER / GOVERNANCE Functions ============ */
-
-    /**
-     * @dev Set the address of the Lock Staking contract
-     * @param _lockStakingContract  Address of the Lock Staking contract
-     */
-    function setLockStakingContract(address _lockStakingContract) external onlyOwner {
-        require(_lockStakingContract != address(0), "Lockon Vesting: Zero address not allowed");
-        lockStakingContract = _lockStakingContract;
     }
 
     /**
-     * @dev Set the address of the Index Staking contract
-     * @param _indexStakingContract  Address of the Index Staking contract
+     * @dev Add address to list banned address
+     * @param _addr Address
      */
-    function setIndexStakingContract(address _indexStakingContract) external onlyOwner {
-        require(_indexStakingContract != address(0), "Lockon Vesting: Zero address not allowed");
-        indexStakingContract = _indexStakingContract;
+    function addBlacklistUser(address _addr) external onlyOwner {
+        require(_addr != address(0), "LOCKON Vesting: Zero address not allowed");
+        require(!isBlacklistUser[_addr], "LOCKON Vesting: Blacklist already contains this address");
+        blacklist.push(_addr);
+        blacklistOneBasedIndexes[_addr] = blacklist.length;
+        isBlacklistUser[_addr] = true;
+        emit UserBlacklistUserAdded(_addr, isBlacklistUser[_addr], block.timestamp);
     }
 
     /**
-     * @dev Set the vesting duration
-     *
-     * @param _vestingDuration The new value for the vesting duration
+     * @dev Remove address from list banned address
+     * @param _addr Address
      */
-    function setVestingDuration(uint256 _vestingDuration) external onlyOwner {
-        vestingDuration = _vestingDuration;
+    function removeBlacklistUser(address _addr) external onlyOwner {
+        require(_addr != address(0), "LOCKON Vesting: Zero address not allowed");
+        require(isBlacklistUser[_addr], "LOCKON Vesting: Blacklist does not contain this address");
+        uint256 len = blacklist.length;
+        uint256 index = blacklistOneBasedIndexes[_addr];
+        address lastValue = blacklist[len - 1];
+        blacklist[index - 1] = lastValue;
+        blacklistOneBasedIndexes[lastValue] = index;
+        // delete the index
+        delete blacklistOneBasedIndexes[_addr];
+        blacklist.pop();
+        isBlacklistUser[_addr] = false;
+        emit UserBlacklistUserRemoved(_addr, isBlacklistUser[_addr], block.timestamp);
+    }
+
+    /**
+     * @dev Get list banned address
+     */
+    function getBlacklist() external view onlyOwner returns (address[] memory) {
+        return blacklist;
+    }
+
+    /**
+     * @notice Pauses the contract, preventing certain functions from being executed.
+     * Only the owner can invoke this function.
+     */
+    function pause() external onlyOwner {
+        _pause(); // Calls the internal _pause function from the Pausable library to pause the contract.
+    }
+
+    /**
+     * @notice Unpauses the contract, allowing normal operation after being paused.
+     * Only the owner can invoke this function.
+     */
+    function unPause() external onlyOwner {
+        _unpause(); // Calls the internal _unpause function from the Pausable library to unpause the contract.
     }
 
     /**

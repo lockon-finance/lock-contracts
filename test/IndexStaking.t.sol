@@ -59,13 +59,13 @@ contract IndexStakingTest is Test {
         indexStaking = new IndexStaking();
         deal(owner, 100 ether);
         // Create 2 mock token
-        lpiToken = new MockERC20Token("Lockon Passive Index", "LPI");
-        lbiToken = new MockERC20Token("Lockon Balance Index", "LBI");
+        lpiToken = new MockERC20Token("LOCKON Passive Index", "LPI");
+        lbiToken = new MockERC20Token("LOCKON Balance Index", "LBI");
         fakeToken = new MockERC20Token("Fake Token", "FAKE");
     }
 
     function initilizeAndConfig() public {
-        lockonVesting.setIndexStakingContract(address(indexStaking));
+        lockonVesting.addAddressDepositPermission(address(indexStaking));
         IndexStaking.PoolInfo memory firstPoolInfo =
             IndexStaking.PoolInfo(IERC20(address(lpiToken)), 0, block.timestamp);
         IndexStaking.PoolInfo memory secondPoolInfo =
@@ -90,7 +90,7 @@ contract IndexStakingTest is Test {
     }
 
     function test_initialize_fail_with_pool_zero_address() public {
-        lockonVesting.setIndexStakingContract(address(indexStaking));
+        lockonVesting.addAddressDepositPermission(address(indexStaking));
         IndexStaking.PoolInfo memory firstPoolInfo = IndexStaking.PoolInfo(IERC20(address(0)), 0, block.timestamp);
         IndexStaking.PoolInfo[] memory poolInfos = new IndexStaking.PoolInfo[](2);
         poolInfos[0] = firstPoolInfo;
@@ -230,7 +230,7 @@ contract IndexStakingTest is Test {
         indexStaking.withdraw(address(lbiToken), depositAmount);
     }
 
-    // // This is only the testing of signature verification on the contract, the actual staking amount would be calculated off-chain
+    // This is only the testing of signature verification on the contract, the actual staking amount would be calculated off-chain
     function test_claim_lock_staking_reward() public {
         initilizeAndConfig();
         uint256 stakeAmount = 10 ether;
@@ -257,7 +257,7 @@ contract IndexStakingTest is Test {
         assertEq(indexStaking.currentRewardAmount(), lockToken.balanceOf(address(indexStaking)));
         // Transfer token to vesting contract
         assertEq(lockToken.balanceOf(address(lockonVesting)), accountContractVestingBefore + claimAmount);
-        assertEq(entries[2].topics[0], keccak256("IndexStakingRewardClaimed(address,string,address,uint256)"));
+        assertEq(entries[3].topics[0], keccak256("IndexStakingRewardClaimed(address,string,address,uint256)"));
     }
 
     function test_claim_index_staking_reward_fail() public {
@@ -383,8 +383,12 @@ contract IndexStakingTest is Test {
     function test_set_validator_address() public {
         initilizeAndConfig();
         vm.prank(owner);
+        vm.recordLogs();
         indexStaking.setValidatorAddress(accountOne);
+        vm.roll(block.number + 1);
+        Vm.Log[] memory entries = vm.getRecordedLogs();
         assertEq(indexStaking.validatorAddress(), accountOne);
+        assertEq(entries[0].topics[0], keccak256("ValidatorAddressUpdated(address,uint256)"));
     }
 
     function test_set_validator_address_fail() public {
@@ -400,8 +404,12 @@ contract IndexStakingTest is Test {
     function test_set_lockon_vesting_address() public {
         initilizeAndConfig();
         vm.prank(owner);
+        vm.recordLogs();
         indexStaking.setLockonVesting(accountOne);
+        vm.roll(block.number + 1);
+        Vm.Log[] memory entries = vm.getRecordedLogs();
         assertEq(indexStaking.lockonVesting(), accountOne);
+        assertEq(entries[0].topics[0], keccak256("LockonVestingAddressUpdated(address,uint256)"));
     }
 
     function test_set_lockon_vesting_address_fail() public {
@@ -438,7 +446,6 @@ contract IndexStakingTest is Test {
 
     function test_get_signer_for_request() public {
         initilizeAndConfig();
-        uint256 stakeAmount = 10 ether;
         uint256 claimAmount = 1 ether;
         string memory requestId = "indexStakingClaimOrder#1";
         SigUtils.ClaimRequest memory claimRequest = SigUtils.ClaimRequest({
@@ -453,8 +460,8 @@ contract IndexStakingTest is Test {
         bytes memory signature = getSignatureFromVRS(v, r, s);
         // Using account one with generated signature
         vm.startPrank(accountOne);
-        lpiToken.approve(address(indexStaking), stakeAmount);
-        indexStaking.deposit(address(lpiToken), stakeAmount);
+        lpiToken.approve(address(indexStaking), claimAmount);
+        indexStaking.deposit(address(lpiToken), claimAmount);
         address signer =
             indexStaking.getSignerForRequest(requestId, accountOne, address(lpiToken), claimAmount, signature);
         assertEq(signer, validator);

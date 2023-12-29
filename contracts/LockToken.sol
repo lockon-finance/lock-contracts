@@ -8,7 +8,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
  * @title LockToken
- * @author Lockon protocol
+ * @author LOCKON
  *
  * Standard ERC20 Token contract with total supply is fixed at 100oku with upgradeable ability
  */

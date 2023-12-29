@@ -16,8 +16,8 @@ async function main() {
       "INDEX_STAKING", 
       "1",
       [
-        [contracts.LPIToken, Math.floor(Date.now() / 1000)], // First pool info
-        [contracts.LBIToken, Math.floor(Date.now() / 1000)]
+        [contracts.LPIToken, 0, Math.floor(Date.now() / 1000)], // First pool info
+        [contracts.LBIToken, 0, Math.floor(Date.now() / 1000)]
       ], // Second pool info
     ],
     {

@@ -18,6 +18,7 @@ contract LockStakingTest is Test {
     address public constant accountTwo = address(2);
     address public validator = vm.addr(validatorPrivateKey);
     uint256 public constant testAccountInitialLockBalance = 1000 ether;
+    uint256 lockAmount = 1 ether;
 
     error OwnableUnauthorizedAccount(address account);
 
@@ -53,14 +54,13 @@ contract LockStakingTest is Test {
         vm.prank(validator);
         lockToken.approve(address(validator), 100000 ether);
         vm.prank(accountOne);
-        lockonVesting.setLockStakingContract(address(lockStaking));
+        lockonVesting.addAddressDepositPermission(address(lockStaking));
     }
 
     function test_add_lock_token() public {
         initilizeAndConfig();
         // Using account one
         vm.startPrank(accountOne);
-        uint256 lockAmount = 1 ether;
         lockToken.approve(address(lockStaking), 1 ether);
         // Lock one Lock Token for 200 days
         vm.recordLogs();
@@ -75,17 +75,21 @@ contract LockStakingTest is Test {
             uint256 lockDuration,
             uint256 lastBasicRate,
             uint256 rewardDebt,
-            uint256 lockEndTimestamp
+            uint256 lockEndTimestamp,
+            uint256 cumulativePendingReward
         ) = lockStaking.userInfo(accountOne);
         uint256 userLastBasicRate = 1e12;
         uint256 userLockScore =
             ((lockAmount * userLastBasicRate) * lockStaking.durationRate(200 days)) / 1e12 / lockStaking.PRECISION();
+        uint256 userCumulativePendingReward =
+            ((userLockScore * lockStaking.rewardPerScore()) / lockStaking.PRECISION()) - rewardDebt;
         assertEq(lockedAmount, lockAmount);
         assertEq(lockDuration, 200 days);
         assertEq(lockScore, userLockScore);
         assertEq(lastBasicRate, userLastBasicRate);
         assertEq(lockEndTimestamp, 200 days + 1);
         assertEq(rewardDebt, (userLockScore * lockStaking.rewardPerScore()) / 1e12);
+        assertEq(cumulativePendingReward, userCumulativePendingReward);
         assertEq(lockStaking.totalLockScore(), lockScore);
         assertEq(lockStaking.totalLockedAmount(), lockAmount);
         // Check for emitted event
@@ -95,20 +99,22 @@ contract LockStakingTest is Test {
         lockToken.approve(address(lockStaking), 1 ether);
         lockStaking.addLockToken(lockAmount, 300 days);
         // Get account one second lock data
-        (lockedAmount, lockScore, lockDuration, lastBasicRate, rewardDebt, lockEndTimestamp) =
+        (lockedAmount, lockScore, lockDuration, lastBasicRate, rewardDebt, lockEndTimestamp,) =
             lockStaking.userInfo(accountOne);
         assertEq(lockToken.balanceOf(accountOne), accountOneBalanceAfterFirstLock - lockAmount);
         userLastBasicRate = 1e12 + (100 days * lockStaking.basicRateDivider() * 1e12) / lockStaking.PRECISION();
-        uint256 newUserLockScore =
+        userLockScore =
             ((lockedAmount * userLastBasicRate) * lockStaking.durationRate(300 days)) / 1e12 / lockStaking.PRECISION();
-
+        userCumulativePendingReward = getCumulativeOfUser(lockStaking, accountOne)
+            + ((userLockScore * lockStaking.rewardPerScore()) / lockStaking.PRECISION()) - rewardDebt;
         assertEq(lockedAmount, lockAmount * 2);
-        assertEq(lockScore, newUserLockScore);
+        assertEq(lockScore, userLockScore);
         assertEq(lockDuration, 300 days);
         assertEq(lastBasicRate, userLastBasicRate);
         assertEq(lockEndTimestamp, (300 days + 200 days - 100 days) + 1);
-        assertEq(lockStaking.totalLockScore(), newUserLockScore);
+        assertEq(lockStaking.totalLockScore(), userLockScore);
         assertEq(lockStaking.totalLockedAmount(), lockAmount * 2);
+        assertEq(getCumulativeOfUser(lockStaking, accountOne), userCumulativePendingReward);
     }
 
     function test_add_lock_token_fail() public {
@@ -125,24 +131,23 @@ contract LockStakingTest is Test {
         );
         // Using account one
         vm.startPrank(accountOne);
-        lockonVesting.setLockStakingContract(address(lockStaking));
-        uint256 lockAmount = 1 ether;
+        lockonVesting.addAddressDepositPermission(address(lockStaking));
         // On few second at the beginning, staking not start
-        vm.expectRevert("Lock Staking: Staking not start");
+        vm.expectRevert("LOCK Staking: Staking not start");
         lockStaking.addLockToken(lockAmount, 200 days);
         // Increase 1 block
         vm.roll(block.number + 1);
         // Fail when lock amount = 0
-        vm.expectRevert("Lock Staking: Locked amount must be greater than 0");
+        vm.expectRevert("LOCK Staking: Locked amount must be greater than 0");
         lockStaking.addLockToken(0, 200 days);
         // Lock duration smaller than minimum
         lockToken.approve(address(lockStaking), 2 ether);
-        vm.expectRevert("Lock Staking: Minimum lock duration does not meet");
+        vm.expectRevert("LOCK Staking: Minimum lock duration does not meet");
         lockStaking.addLockToken(lockAmount, 50 days);
         skip(19 days);
         lockStaking.addLockToken(lockAmount, 200 days);
         skip(10 days);
-        vm.expectRevert("Lock Staking: Invalid lock duration");
+        vm.expectRevert("LOCK Staking: Invalid lock duration");
         lockStaking.addLockToken(lockAmount, 100 days);
     }
 
@@ -150,10 +155,9 @@ contract LockStakingTest is Test {
         initilizeAndConfig();
         // Using account one
         vm.startPrank(accountOne);
-        uint256 lockAmount = 1 ether;
         lockToken.approve(address(lockStaking), 1 ether);
         lockStaking.addLockToken(lockAmount, 101 days);
-        vm.expectRevert("Lock Staking: Invalid lock duration");
+        vm.expectRevert("LOCK Staking: Invalid lock duration");
         lockStaking.addLockToken(lockAmount, 100 days);
     }
 
@@ -161,7 +165,6 @@ contract LockStakingTest is Test {
         initilizeAndConfig();
         // Using account one
         vm.startPrank(accountOne);
-        uint256 lockAmount = 1 ether;
         lockToken.approve(address(lockStaking), 1 ether);
         // Lock one Lock Token for 200 days
         lockStaking.addLockToken(lockAmount, 200 days);
@@ -173,7 +176,7 @@ contract LockStakingTest is Test {
             uint256 lockDuration,
             uint256 lastBasicRate,
             uint256 rewardDebt,
-            uint256 lastLockedTimestamp
+            uint256 lastLockedTimestamp,
         ) = lockStaking.userInfo(accountOne);
         uint256 totalLockScore = lockStaking.totalLockScore();
         uint256 userLockScore = lockScore;
@@ -185,8 +188,8 @@ contract LockStakingTest is Test {
         vm.roll(block.number + 1);
         Vm.Log[] memory entries = vm.getRecordedLogs();
         // Get account one extend lock data
-        (lockedAmount, lockScore, lockDuration, lastBasicRate, rewardDebt, lastLockedTimestamp) =
-            lockStaking.userInfo(accountOne);
+        (lockedAmount, lockScore, lockDuration, lastBasicRate,, lastLockedTimestamp,) = lockStaking.userInfo(accountOne);
+
         // lockedAmount does not change because it is just extend lock duration
         assertEq(lockedAmount, lockAmount);
         uint256 userLockScoreAfter =
@@ -197,10 +200,16 @@ contract LockStakingTest is Test {
         // Lock duration should be 300 days
         assertEq(lockDuration, 300 days);
         assertEq(lastBasicRate, 1e12 + (30 days * lockStaking.basicRateDivider() * 1e12) / lockStaking.PRECISION());
-        console.log(rewardDebt);
-        assertEq(rewardDebt, (userLockScoreAfter * lockStaking.rewardPerScore()) / 1e12);
+        assertEq(getRewardDebtOfUser(lockStaking, accountOne), (lockScore * lockStaking.rewardPerScore()) / 1e12);
+        // Cumulative pending reward should be updated
+        assertEq(
+            getCumulativeOfUser(lockStaking, accountOne),
+            calculateCumulatePendingReward(
+                userLockScore, lockStaking.rewardPerScore(), lockStaking.PRECISION(), rewardDebt
+            )
+        );
         // Check for emitted event
-        assertEq(entries[3].topics[0], keccak256("ExtendLockDuration(address,uint256,uint256,uint256,uint256)"));
+        assertEq(entries[1].topics[0], keccak256("ExtendLockDuration(address,uint256,uint256,uint256,uint256)"));
     }
 
     function test_extend_lock_duration_fail() public {
@@ -208,21 +217,21 @@ contract LockStakingTest is Test {
         // Using account one
         vm.startPrank(accountOne);
         // Nothing to extend
-        vm.expectRevert("Lock Staking: Nothing to extend");
+        vm.expectRevert("LOCK Staking: Nothing to extend");
         lockStaking.extendLockDuration(100 days);
-        uint256 lockAmount = 1 ether;
         // Lock one Lock Token for 200 days
         vm.recordLogs();
         lockToken.approve(address(lockStaking), 1 ether);
         lockStaking.addLockToken(lockAmount, 200 days);
-        // New lock duration must be greater than current duration
-        vm.expectRevert("Lock Staking: Invalid lock duration");
-        lockStaking.extendLockDuration(100 days);
-        vm.expectRevert("Lock Staking: Minimum lock duration does not meet");
+        // New lock duration must be greater or equal 100 days
+        vm.expectRevert("LOCK Staking: Minimum lock duration does not meet");
         lockStaking.extendLockDuration(80 days);
+        // New lock duration must be greater than current duration
+        vm.expectRevert("LOCK Staking: Invalid lock duration");
+        lockStaking.extendLockDuration(100 days);
         // Cannot extend duration after withdraw
         lockStaking.withdrawLockToken(1 ether);
-        vm.expectRevert("Lock Staking: Nothing to extend");
+        vm.expectRevert("LOCK Staking: Nothing to extend");
         lockStaking.extendLockDuration(201 days);
     }
 
@@ -230,12 +239,11 @@ contract LockStakingTest is Test {
         initilizeAndConfig();
         // Using account one
         vm.startPrank(accountOne);
-        uint256 lockAmount = 1 ether;
         lockToken.approve(address(lockStaking), 1 ether);
         // Lock one Lock Token for 200 days and then withdraw after 10 days
         // Should be charge 30% as penalty fee and transfer it to validator address
         lockStaking.addLockToken(lockAmount, 200 days);
-        (, uint256 lockScore,,,,) = lockStaking.userInfo(accountOne);
+        (, uint256 lockScore,,, uint256 rewardDebt,, uint256 cumulativePendingReward) = lockStaking.userInfo(accountOne);
         skip(10 days);
         uint256 validatorBalanceBefore = lockToken.balanceOf(validator);
         uint256 accountOneBalanceBefore = lockToken.balanceOf(accountOne);
@@ -243,8 +251,12 @@ contract LockStakingTest is Test {
         assertEq(lockStaking.totalLockScore(), lockScore);
         assertEq(lockStaking.totalLockedAmount(), lockAmount);
         lockStaking.withdrawLockToken(lockAmount);
+        uint256 userCumulativePendingReward =
+            (lockScore * lockStaking.rewardPerScore()) / lockStaking.PRECISION() - rewardDebt;
+        (, lockScore,,, rewardDebt,, cumulativePendingReward) = lockStaking.userInfo(accountOne);
         assertEq(lockStaking.totalLockScore(), 0);
         assertEq(lockStaking.totalLockedAmount(), 0);
+        assertEq(cumulativePendingReward, userCumulativePendingReward);
         uint256 penaltyFee = (lockAmount * lockStaking.penaltyRate()) / lockStaking.PRECISION();
         Vm.Log[] memory entries = vm.getRecordedLogs();
         uint256 validatorBalanceAfter = lockToken.balanceOf(validator);
@@ -252,7 +264,7 @@ contract LockStakingTest is Test {
         assertEq(validatorBalanceAfter, validatorBalanceBefore + penaltyFee);
         assertEq(accountOneBalanceAfter, accountOneBalanceBefore + lockAmount - penaltyFee);
         // Check for emitted event, since the penalty is applied, there will be 7 more event emitted before the withdraw event is emitted
-        assertEq(entries[5].topics[0], keccak256("WithdrawLockToken(address,uint256,uint256,uint256)"));
+        assertEq(entries[3].topics[0], keccak256("WithdrawLockToken(address,uint256,uint256,uint256)"));
         // Lock another one Lock Token and then skip 200 days
         lockToken.approve(address(lockStaking), 1 ether);
         lockStaking.addLockToken(lockAmount, 200 days);
@@ -276,46 +288,43 @@ contract LockStakingTest is Test {
         initilizeAndConfig();
         // User not lock any Lock Token but still call to withdraw
         vm.startPrank(accountOne);
-        vm.expectRevert("Lock Staking: Nothing to withdraw");
+        vm.expectRevert("LOCK Staking: Nothing to withdraw");
         lockStaking.withdrawLockToken(1);
         // Withdraw more than locked amount
         lockToken.approve(address(lockStaking), 1 ether);
         lockStaking.addLockToken(1 ether, 200 days);
-        vm.expectRevert("Lock Staking: Withdraw amount must be greater than 0");
+        vm.expectRevert("LOCK Staking: Withdraw amount must be greater than 0");
         lockStaking.withdrawLockToken(0);
-        vm.expectRevert("Lock Staking: Withdraw amount exceed available");
+        vm.expectRevert("LOCK Staking: Withdraw amount exceed available");
         lockStaking.withdrawLockToken(10 ether);
     }
 
     function test_claim_pending_reward() public {
         initilizeAndConfig();
-        uint256 lockAmount = 10 ether;
+        uint256 lockAmountLocal = 10 ether;
         vm.startPrank(accountOne);
-        lockToken.approve(address(lockStaking), lockAmount);
-        lockStaking.addLockToken(lockAmount, 100 days);
+        lockToken.approve(address(lockStaking), lockAmountLocal);
+        lockStaking.addLockToken(lockAmountLocal, 100 days);
         skip(100 days);
-        vm.recordLogs();
         uint256 lockonVestingBalanceBefore = lockToken.balanceOf(address(lockonVesting));
         uint256 pendingReward = lockStaking.pendingReward(accountOne);
+        vm.recordLogs();
         lockStaking.claimPendingReward();
+        vm.roll(block.number + 1);
         Vm.Log[] memory entries = vm.getRecordedLogs();
         assertEq(lockToken.balanceOf(address(lockonVesting)), lockonVestingBalanceBefore + pendingReward);
         assertEq(entries[3].topics[0], keccak256("ClaimLockStakingReward(address,uint256,uint256)"));
     }
 
-    function test_claim_pending_reward_fail() public {
-        initilizeAndConfig();
-        // User not lock any Lock Token but still call to claim
-        vm.prank(accountOne);
-        vm.expectRevert("Lock Staking: Current score is zero");
-        lockStaking.claimPendingReward();
-    }
-
     function test_set_fee_receiver_address() public {
         initilizeAndConfig();
         vm.prank(owner);
+        vm.recordLogs();
         lockStaking.setFeeReceiver(accountOne);
+        vm.roll(block.number + 1);
+        Vm.Log[] memory entries = vm.getRecordedLogs();
         assertEq(lockStaking.feeReceiver(), accountOne);
+        assertEq(entries[0].topics[0], keccak256("FeeReceiverUpdated(address,uint256)"));
     }
 
     function test_set_fee_receiver_address_fail() public {
@@ -323,7 +332,7 @@ contract LockStakingTest is Test {
         vm.prank(accountOne);
         vm.expectRevert(abi.encodeWithSelector(OwnableUnauthorizedAccount.selector, accountOne));
         lockStaking.setFeeReceiver(accountOne);
-        vm.expectRevert("Lock Staking: Zero address not allowed");
+        vm.expectRevert("LOCK Staking: Zero address not allowed");
         vm.prank(owner);
         lockStaking.setFeeReceiver(address(0));
     }
@@ -331,8 +340,12 @@ contract LockStakingTest is Test {
     function test_set_lockon_vesting_address() public {
         initilizeAndConfig();
         vm.prank(owner);
+        vm.recordLogs();
         lockStaking.setLockonVesting(accountOne);
+        vm.roll(block.number + 1);
+        Vm.Log[] memory entries = vm.getRecordedLogs();
         assertEq(lockStaking.lockonVesting(), accountOne);
+        assertEq(entries[0].topics[0], keccak256("LockonVestingUpdated(address,uint256)"));
     }
 
     function test_set_lockon_vesting_address_fail() public {
@@ -340,7 +353,7 @@ contract LockStakingTest is Test {
         vm.prank(accountOne);
         vm.expectRevert(abi.encodeWithSelector(OwnableUnauthorizedAccount.selector, accountOne));
         lockStaking.setLockonVesting(accountOne);
-        vm.expectRevert("Lock Staking: Zero address not allowed");
+        vm.expectRevert("LOCK Staking: Zero address not allowed");
         vm.prank(owner);
         lockStaking.setLockonVesting(address(0));
     }
@@ -348,6 +361,7 @@ contract LockStakingTest is Test {
     function test_set_functions() public {
         initilizeAndConfig();
         vm.startPrank(owner);
+        vm.recordLogs();
         lockStaking.setBasicRateDivider(5);
         assertEq(lockStaking.basicRateDivider(), 5);
         lockStaking.setBonusRatePerSecond(2);
@@ -356,6 +370,12 @@ contract LockStakingTest is Test {
         assertEq(lockStaking.minimumLockDuration(), 35600);
         lockStaking.setPenaltyRate(2000);
         assertEq(lockStaking.penaltyRate(), 2000);
+        vm.roll(block.number + 1);
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        assertEq(entries[0].topics[0], keccak256("BasicRateDividerUpdated(uint256,uint256)"));
+        assertEq(entries[1].topics[0], keccak256("BonusRatePerSecondUpdated(uint256,uint256,uint256,uint256,uint256)"));
+        assertEq(entries[2].topics[0], keccak256("MinimumLockDurationUpdated(uint256,uint256)"));
+        assertEq(entries[3].topics[0], keccak256("PenaltyRateUpdated(uint256,uint256)"));
     }
 
     function test_view_function() public {
@@ -398,13 +418,13 @@ contract LockStakingTest is Test {
         vm.startPrank(accountOne);
         lockToken.approve(address(lockStaking), 1000 ether);
         lockStaking.addLockToken(1000 ether, 301 days);
-        vm.expectRevert("Lock Staking: Reward distributed exceed supply");
+        vm.expectRevert("LOCK Staking: Reward distributed exceed supply");
         skip(300 days);
         // Reward not transfer to contract so no reward supply
         lockStaking.updatePool();
     }
 
-    function test_revert_on_add_vesting() public {
+    function test_revert_on_deposit_vesting() public {
         lockonVesting.initialize(accountOne, address(lockToken));
         lockStaking.initialize(
             owner,
@@ -420,19 +440,13 @@ contract LockStakingTest is Test {
         lockToken.transfer(address(lockStaking), 100000 ether);
         // Using account one
         vm.startPrank(accountOne);
-        uint256 lockAmount = 1 ether;
-        lockToken.approve(address(lockStaking), lockAmount);
+        lockToken.approve(address(lockStaking), 2 * lockAmount);
         // Lock one Lock Token for 200 days
         lockStaking.addLockToken(lockAmount, 200 days);
         skip(1 days);
-        // Since the lock staking contract is not set, all next tx will be revert
-        vm.expectRevert("Lockon Vesting: Forbidden");
         lockStaking.addLockToken(lockAmount, 200 days);
-        vm.expectRevert("Lockon Vesting: Forbidden");
-        lockStaking.extendLockDuration(300 days);
-        vm.expectRevert("Lockon Vesting: Forbidden");
-        lockStaking.withdrawLockToken(lockAmount);
-        vm.expectRevert("Lockon Vesting: Forbidden");
+        // Since the lock staking contract is not set, all next tx will be revert
+        vm.expectRevert("LOCKON Vesting: Forbidden");
         lockStaking.claimPendingReward();
     }
 
@@ -458,7 +472,7 @@ contract LockStakingTest is Test {
         vm.startPrank(accountOne);
         lockToken.approve(address(lockStaking), amount);
         lockStaking.addLockToken(amount, 100 days);
-        (uint256 lockedAmount,, uint256 lockDuration,,,) = lockStaking.userInfo(accountOne);
+        (uint256 lockedAmount,, uint256 lockDuration,,,,) = lockStaking.userInfo(accountOne);
         assertEq(lockedAmount, amount);
         assertEq(lockDuration, 100 days);
     }
@@ -471,5 +485,24 @@ contract LockStakingTest is Test {
         assertEq(address(lockStaking).balance, 1 ether);
         payable(address(lockStaking)).transfer(1 ether);
         assertEq(address(lockStaking).balance, 2 ether);
+    }
+
+    function getCumulativeOfUser(LockStaking lockStakingContract, address account) public view returns (uint256) {
+        (,,,,,, uint256 cumulativePendingReward) = lockStakingContract.userInfo(account);
+        return cumulativePendingReward;
+    }
+
+    function getRewardDebtOfUser(LockStaking lockStakingContract, address account) public view returns (uint256) {
+        (,,,, uint256 rewardDebt,,) = lockStakingContract.userInfo(account);
+        return rewardDebt;
+    }
+
+    function calculateCumulatePendingReward(
+        uint256 lockScore,
+        uint256 rewardPerScore,
+        uint256 precision,
+        uint256 rewardDebt
+    ) public pure returns (uint256) {
+        return ((lockScore * rewardPerScore) / precision) - rewardDebt;
     }
 }
