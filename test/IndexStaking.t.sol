@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
 import "forge-std/Test.sol";
@@ -66,11 +66,11 @@ contract IndexStakingTest is Test {
 
     function initilizeAndConfig() public {
         lockonVesting.addAddressDepositPermission(address(indexStaking));
-        IndexStaking.PoolInfo memory firstPoolInfo =
-            IndexStaking.PoolInfo(IERC20(address(lpiToken)), 0, block.timestamp);
-        IndexStaking.PoolInfo memory secondPoolInfo =
-            IndexStaking.PoolInfo(IERC20(address(lbiToken)), 0, block.timestamp);
-        IndexStaking.PoolInfo[] memory poolInfos = new IndexStaking.PoolInfo[](2);
+        IndexStaking.InitPoolInfo memory firstPoolInfo =
+            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), block.timestamp);
+        IndexStaking.InitPoolInfo memory secondPoolInfo =
+            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), block.timestamp);
+        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
         poolInfos[0] = firstPoolInfo;
         poolInfos[1] = secondPoolInfo;
         indexStaking.initialize(
@@ -91,8 +91,8 @@ contract IndexStakingTest is Test {
 
     function test_initialize_fail_with_pool_zero_address() public {
         lockonVesting.addAddressDepositPermission(address(indexStaking));
-        IndexStaking.PoolInfo memory firstPoolInfo = IndexStaking.PoolInfo(IERC20(address(0)), 0, block.timestamp);
-        IndexStaking.PoolInfo[] memory poolInfos = new IndexStaking.PoolInfo[](2);
+        IndexStaking.InitPoolInfo memory firstPoolInfo = IndexStaking.InitPoolInfo(IERC20(address(0)), block.timestamp);
+        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
         poolInfos[0] = firstPoolInfo;
         vm.expectRevert("Index Staking: Zero address not allowed");
         indexStaking.initialize(

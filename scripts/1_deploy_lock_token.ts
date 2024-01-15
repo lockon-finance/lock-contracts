@@ -1,4 +1,4 @@
-import { ethers, network, run, upgrades } from "hardhat";
+import { ethers, network, run, defender } from "hardhat";
 
 import { getContracts, saveContract } from "./utils/deploy-helper";
 
@@ -6,29 +6,22 @@ async function main() {
   const contracts = getContracts(network.name)[network.name];
 
   const LockToken = await ethers.getContractFactory("LockToken");
-  const lockToken = await upgrades.deployProxy(LockToken, [
+  const upgradeApprovalProcess = await defender.getUpgradeApprovalProcess();
+
+  if (upgradeApprovalProcess.address === undefined) {
+    throw new Error(`Upgrade approval process with id ${upgradeApprovalProcess.approvalProcessId} has no assigned address`);
+  }
+
+  const lockToken = await defender.deployProxy(LockToken, [
     "LockToken",
     "LOCK",
-    contracts.ownerAddress,
+    upgradeApprovalProcess.address, // multisig address
     contracts.operatorAddress,
-  ]);
+  ], { initializer: "initialize", kind: "uups" });
 
   await lockToken.waitForDeployment();
-  console.log("Lock Token contract deployed to address:", lockToken.target);
-  saveContract(network.name, "lockToken", lockToken.target);
-
-  // Get implementation address to verify
-  const implementationAddress = await upgrades.erc1967.getImplementationAddress(
-    String(lockToken.target)
-  );
-  console.log("Implementation contract address:", implementationAddress);
-
-  await run("verify:verify", {
-    address: implementationAddress,
-    constructorArguments: [],
-  });
-
-  console.log(`Complete!`);
+  console.log("Lock Token contract deployed to address:", await lockToken.getAddress());
+  saveContract(network.name, "lockToken", await lockToken.getAddress());
 }
 
 // We recommend this pattern to be able to use async/await everywhere

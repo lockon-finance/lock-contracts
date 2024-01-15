@@ -1,7 +1,7 @@
 {
   "name": "lockon-contracts",
   "description": "This is the set of Lock Token, Vesting and Staking contracts of lockon protocol",
-  "license": "GPL-2.0-or-later",
+  "license": "MIT",
   "version": "0.1.1",
   "scripts": {
     "compile": "npx hardhat compile",

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
 import "forge-std/Test.sol";
@@ -101,11 +101,13 @@ contract UpgradeProxyTest is Test {
         vm.prank(accountOne);
         vestingProxy = address(new ERC1967Proxy(address(lockonVesting), lockonVestingData));
         // initiate pools and token for index staking contract
-        IndexStaking.PoolInfo memory firstPoolInfo = IndexStaking.PoolInfo(IERC20(address(lpiToken)), 0, block.number);
-        IndexStaking.PoolInfo memory secondPoolInfo = IndexStaking.PoolInfo(IERC20(address(lbiToken)), 0, block.number);
+        IndexStaking.InitPoolInfo memory firstPoolInfo =
+            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), block.number);
+        IndexStaking.InitPoolInfo memory secondPoolInfo =
+            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), block.number);
         lpiToken = new MockERC20Token("Lockon Passive Index", "LPI");
         lbiToken = new MockERC20Token("Lockon Balance Index", "LBI");
-        IndexStaking.PoolInfo[] memory poolInfos = new IndexStaking.PoolInfo[](2);
+        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
         poolInfos[0] = firstPoolInfo;
         poolInfos[1] = secondPoolInfo;
         bytes memory indexStakingData = abi.encodeCall(

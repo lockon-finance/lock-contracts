@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: GPL-2.0-or-later
+//SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
@@ -37,6 +37,7 @@ contract LockToken is Initializable, OwnableUpgradeable, ERC20Upgradeable, UUPSU
         __ERC20_init_unchained(name, symbol);
         // Initialize the contract's owner
         __Ownable_init_unchained(ownerAddress);
+        __UUPSUpgradeable_init();
         // Calculate the amount of tokens to mint to the owner (60% of MAX_SUPPLY)
         uint256 amountMintToOwner = (MAX_SUPPLY * 6000) / BASE_DENOMINATOR;
         // Calculate the amount of tokens to mint to the operator (40% of MAX_SUPPLY)

@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: GPL-2.0-or-later
+//SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -143,7 +143,9 @@ contract LockonVesting is
     function initialize(address _owner, address _lockToken) public initializer {
         // Initialize Ownable lib and set the owner
         __Ownable_init_unchained(_owner);
-
+        __UUPSUpgradeable_init();
+        __Pausable_init();
+        __ReentrancyGuard_init();
         lockToken = IERC20(_lockToken);
         vestingCategories[0] = 300 days; // index 0 represents category LOCK STAKING
         vestingCategories[1] = 300 days; // index 1 represents category INDEX STAKING

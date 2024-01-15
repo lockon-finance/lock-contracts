@@ -1,4 +1,4 @@
-import { ethers, network, run, upgrades } from "hardhat";
+import { ethers, network, run, defender } from "hardhat";
 
 import { getContracts } from "./utils/deploy-helper";
 
@@ -7,23 +7,9 @@ async function main() {
 
   const LockToken = await ethers.getContractFactory("LockToken");
 
-  //Upgrade proxy
-  const lockToken = await upgrades.upgradeProxy(contracts.lockToken, LockToken);
-  await lockToken.waitForDeployment();
-  console.log(`Upgraded Lock Token to ${lockToken.target}`);
+  const proposal = await defender.proposeUpgradeWithApproval(contracts.lockToken, LockToken);
 
-  // Get implementation address to verify
-  const implementationAddress = await upgrades.erc1967.getImplementationAddress(
-    String(lockToken.target)
-  );
-  console.log("Implementation contract address:", implementationAddress);
-
-  await run("verify:verify", {
-    address: implementationAddress,
-    constructorArguments: [],
-  });
-
-  console.log("Completed!");
+  console.log(`Lock Token Upgrade proposed with URL: ${proposal.url}`);
 }
 
 main().catch((error) => {

@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: GPL-2.0-or-later
+//SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -305,6 +305,9 @@ contract LockStaking is
         // Initialize the contract and set the owner
         // This function should be called only once during deployment
         __Ownable_init_unchained(_owner);
+        __UUPSUpgradeable_init();
+        __Pausable_init();
+        __ReentrancyGuard_init();
         EIP712Upgradeable.__EIP712_init("LOCK_STAKING", "1");
         validatorAddress = _validator;
         lockonVesting = _lockonVesting;

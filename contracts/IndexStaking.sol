@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: GPL-2.0-or-later
+//SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -50,6 +50,11 @@ contract IndexStaking is
         uint256 startTimestamp; // The timestamp at which staking in the pool starts
     }
 
+    struct InitPoolInfo {
+        IERC20 stakeToken; // The ERC20 token used for staking
+        uint256 startTimestamp; // The timestamp at which staking in the pool starts
+    }
+
     // Information about user's claim request
     struct ClaimRequest {
         string requestId; // An ID for the staking reward claim request
@@ -76,7 +81,7 @@ contract IndexStaking is
     // Current amount of reward used to pay for user staking's reward
     uint256 public currentRewardAmount;
     // A mapping to track PoolInfo struct for each stake token address
-    mapping(address => PoolInfo) public tokenPoolInfo; // TODO should: Can we use a type that doesn't include the unnecessary `totalStakedAmount` property for initialization?
+    mapping(address => PoolInfo) public tokenPoolInfo;
     // A mapping to track UserInfo for each user in each pool
     mapping(address => mapping(address => UserInfo)) public userInfo;
     // Track the status of each requestId
@@ -175,13 +180,15 @@ contract IndexStaking is
         uint256 _currentRewardAmount,
         string memory _domainName,
         string memory _signatureVersion,
-        PoolInfo[] calldata pools
+        InitPoolInfo[] calldata pools
     ) external initializer {
         EIP712Upgradeable.__EIP712_init(_domainName, _signatureVersion);
         // Initialize the contract and set the owner
         // This function should be called only once during deployment
         __Ownable_init_unchained(_owner);
-
+        __UUPSUpgradeable_init();
+        __Pausable_init();
+        __ReentrancyGuard_init();
         validatorAddress = _validator;
         lockonVesting = _lockonVesting;
         currentRewardAmount = _currentRewardAmount;
