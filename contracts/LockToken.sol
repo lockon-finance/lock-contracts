@@ -16,6 +16,7 @@ contract LockToken is Initializable, OwnableUpgradeable, ERC20Upgradeable, UUPSU
     /* ============ Constants ============== */
 
     // Maximum supply of Lock Token
+
     uint256 public constant MAX_SUPPLY = 10_000_000_000;
     // Represents the scaling factor used in calculations
     uint256 public constant BASE_DENOMINATOR = 10_000;

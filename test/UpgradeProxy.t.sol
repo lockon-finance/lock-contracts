@@ -83,6 +83,7 @@ contract UpgradeProxyTest is Test {
             lockStaking.initialize,
             (
                 owner,
+                validator, // For testing, use validator as penalty fee receiver also
                 address(lockonVesting),
                 validator, // For testing, use validator as penalty fee receiver also
                 address(token),

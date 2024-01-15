@@ -223,6 +223,7 @@ contract LockonVesting is
         external
         onlyDepositGrantedOrOwner
         whenNotPaused
+        nonReentrant
     {
         require(!isBlacklistUser[user], "LOCKON Vesting: User has been banned from all activities in LOCKON Vesting");
         require(amount != 0, "LOCKON Vesting: Vesting amount must be greater than 0");
@@ -279,10 +280,7 @@ contract LockonVesting is
      */
     function addAddressDepositPermission(address _addr) external onlyOwner {
         require(_addr != address(0), "LOCKON Vesting: Zero address not allowed");
-        require(
-            !isAllowedDeposit[_addr],
-            "LOCKON Vesting: List allowed deposit address already contains this address"
-        );
+        require(!isAllowedDeposit[_addr], "LOCKON Vesting: List allowed deposit address already contains this address");
         listAllowedDeposit.push(_addr);
         allowedDepositOneBasedIndexes[_addr] = listAllowedDeposit.length;
         isAllowedDeposit[_addr] = true;
@@ -295,10 +293,7 @@ contract LockonVesting is
      */
     function removeAddressDepositPermission(address _addr) external onlyOwner {
         require(_addr != address(0), "LOCKON Vesting: Zero address not allowed");
-        require(
-            isAllowedDeposit[_addr],
-            "LOCKON Vesting: List allowed deposit address does not contain this address"
-        );
+        require(isAllowedDeposit[_addr], "LOCKON Vesting: List allowed deposit address does not contain this address");
         uint256 len = listAllowedDeposit.length;
         uint256 index = allowedDepositOneBasedIndexes[_addr];
         address lastValue = listAllowedDeposit[len - 1];

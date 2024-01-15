@@ -9,6 +9,7 @@ async function main() {
     LockStaking,
     [
       contracts.ownerAddress,
+      contracts.operatorAddress,
       contracts.lockonVesting,
       contracts.feeReceiver,
       contracts.lockToken,

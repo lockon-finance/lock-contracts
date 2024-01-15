@@ -127,7 +127,7 @@ contract IndexStaking is
      *
      * @param sender Address of the function executor
      * @param requestId Identifier for the staking reward claim order being canceled
-     * @param stakeToken Identifier of the staking pool for which the claim order is canceled
+     * @param stakeToken Identifier of the staking pool for which the claim order is cancelled
      */
     event ClaimOrderCancel(address indexed sender, string requestId, address stakeToken);
 
@@ -146,6 +146,14 @@ contract IndexStaking is
      * @param timestamp Timestamp at which the address is updated
      */
     event ValidatorAddressUpdated(address validator, uint256 timestamp);
+
+    /**
+     * Emitted when the admin allocates an amount of lock tokens to the contract
+     *
+     * @param owner Address of the owner to allocate lock tokens
+     * @param amount Amount of lock tokens that are allocated
+     */
+    event LockTokenAllocated(address owner, uint256 amount);
 
     /**
      * @dev Initializes the Index Staking contract with default pools
@@ -217,7 +225,7 @@ contract IndexStaking is
      * @param _stakeToken address of the stake token of the staking pool user wants to deposit
      * @param _stakeAmount The amount of ERC-20 tokens that the user wants to stake in the pool
      */
-    function deposit(address _stakeToken, uint256 _stakeAmount) external whenNotPaused {
+    function deposit(address _stakeToken, uint256 _stakeAmount) external whenNotPaused nonReentrant {
         require(_stakeAmount > 0, "Index Staking: Stake amount must be greater than 0");
         // Get pool & user information
         PoolInfo storage pool = tokenPoolInfo[_stakeToken];
@@ -239,7 +247,7 @@ contract IndexStaking is
      * @param _stakeToken address of the stake token of the staking pool user wants to withdraw
      * @param _withdrawAmount The amount of ERC-20 tokens that the user wants to withdraw from the pool
      */
-    function withdraw(address _stakeToken, uint256 _withdrawAmount) external whenNotPaused {
+    function withdraw(address _stakeToken, uint256 _withdrawAmount) external whenNotPaused nonReentrant {
         // Get pool & user information
         PoolInfo storage pool = tokenPoolInfo[_stakeToken];
         UserInfo storage user = userInfo[msg.sender][_stakeToken];
@@ -358,6 +366,16 @@ contract IndexStaking is
         require(_validatorAddress != address(0), "Index Staking: Zero address not allowed");
         validatorAddress = _validatorAddress;
         emit ValidatorAddressUpdated(validatorAddress, block.timestamp);
+    }
+
+    /**
+     * @dev Allows the owner to add LOCK tokens to contract Index staking
+     *
+     * @param _lockAmount The LOCK token amount to be added
+     */
+    function allocateLockToken(uint256 _lockAmount) external onlyOwner nonReentrant {
+        lockToken.safeTransferFrom(msg.sender, address(this), _lockAmount);
+        emit LockTokenAllocated(msg.sender, _lockAmount);
     }
 
     /**

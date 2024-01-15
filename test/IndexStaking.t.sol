@@ -9,7 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IndexStaking} from "../contracts/IndexStaking.sol";
 import {LockToken} from "../contracts/LockToken.sol";
 import {LockonVesting} from "../contracts/LockonVesting.sol";
-import {SigUtils} from "./SigUtil.sol";
+import {IndexSigUtils} from "./IndexSigUtil.sol";
 
 contract MockERC20Token is ERC20 {
     address public constant accountOne = address(1);
@@ -30,7 +30,7 @@ contract IndexStakingTest is Test {
     MockERC20Token lpiToken;
     MockERC20Token lbiToken;
     MockERC20Token fakeToken;
-    SigUtils internal sigUtils;
+    IndexSigUtils internal sigUtils;
 
     struct PoolInfo {
         IERC20 stakeToken;
@@ -76,7 +76,7 @@ contract IndexStakingTest is Test {
         indexStaking.initialize(
             owner, validator, address(lockonVesting), address(lockToken), 100000 ether, "INDEX_STAKING", "1", poolInfos
         );
-        sigUtils = new SigUtils(indexStaking.getDomainSeparator());
+        sigUtils = new IndexSigUtils(indexStaking.getDomainSeparator());
         // NOTICE: In real life, token will be transfer to contract from BE wallet for reward distribution
         // Transfer reward to contract for token distribute
         lockToken.transfer(address(indexStaking), 100000 ether);
@@ -236,7 +236,7 @@ contract IndexStakingTest is Test {
         uint256 stakeAmount = 10 ether;
         uint256 claimAmount = 1 ether;
         string memory requestId = "indexStakingClaimOrder#1";
-        SigUtils.ClaimRequest memory claimRequest = SigUtils.ClaimRequest({
+        IndexSigUtils.ClaimRequest memory claimRequest = IndexSigUtils.ClaimRequest({
             requestId: requestId,
             beneficiary: accountOne,
             stakeToken: address(lpiToken),
@@ -268,7 +268,7 @@ contract IndexStakingTest is Test {
         string memory requestId = "indexStakingClaimOrder#1";
 
         //with valid amount
-        SigUtils.ClaimRequest memory validClaimRequest = SigUtils.ClaimRequest({
+        IndexSigUtils.ClaimRequest memory validClaimRequest = IndexSigUtils.ClaimRequest({
             requestId: requestId,
             beneficiary: accountOne,
             stakeToken: address(lpiToken),
@@ -280,7 +280,7 @@ contract IndexStakingTest is Test {
         bytes memory signatureWithValidAmount = getSignatureFromVRS(v, r, s);
 
         //with invalid amount
-        SigUtils.ClaimRequest memory invalidCancelClaimRequest = SigUtils.ClaimRequest({
+        IndexSigUtils.ClaimRequest memory invalidCancelClaimRequest = IndexSigUtils.ClaimRequest({
             requestId: requestId,
             beneficiary: accountOne,
             stakeToken: address(lpiToken),
@@ -323,7 +323,7 @@ contract IndexStakingTest is Test {
         uint256 stakeAmount = 10 ether;
         uint256 claimAmount = 1 ether;
         string memory requestId = "indexStakingClaimOrder#1";
-        SigUtils.ClaimRequest memory claimRequest = SigUtils.ClaimRequest({
+        IndexSigUtils.ClaimRequest memory claimRequest = IndexSigUtils.ClaimRequest({
             requestId: requestId,
             beneficiary: accountOne,
             stakeToken: address(lpiToken),
@@ -351,7 +351,7 @@ contract IndexStakingTest is Test {
         uint256 stakeAmount = 10 ether;
         uint256 claimAmount = 1 ether;
         string memory requestId = "indexStakingClaimOrder#1";
-        SigUtils.ClaimRequest memory claimRequest = SigUtils.ClaimRequest({
+        IndexSigUtils.ClaimRequest memory claimRequest = IndexSigUtils.ClaimRequest({
             requestId: requestId,
             beneficiary: accountOne,
             stakeToken: address(lpiToken),
@@ -422,6 +422,21 @@ contract IndexStakingTest is Test {
         indexStaking.setLockonVesting(address(0));
     }
 
+    function test_allocate_token() public {
+        initilizeAndConfig();
+        uint256 lockAmount = 1 ether;
+        uint256 oldLockBalance = lockToken.balanceOf(address(indexStaking));
+        // Using account one
+        vm.startPrank(owner);
+        vm.recordLogs();
+        // Allocate amount of lock token
+        lockToken.approve(address(indexStaking), lockAmount);
+        indexStaking.allocateLockToken(lockAmount);
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        assertEq(entries[2].topics[0], keccak256("LockTokenAllocated(address,uint256)"));
+        assertEq(lockToken.balanceOf(address(indexStaking)), oldLockBalance + lockAmount);
+    }
+
     function test_pause_and_unpause() public {
         initilizeAndConfig();
         vm.prank(owner);
@@ -448,7 +463,7 @@ contract IndexStakingTest is Test {
         initilizeAndConfig();
         uint256 claimAmount = 1 ether;
         string memory requestId = "indexStakingClaimOrder#1";
-        SigUtils.ClaimRequest memory claimRequest = SigUtils.ClaimRequest({
+        IndexSigUtils.ClaimRequest memory claimRequest = IndexSigUtils.ClaimRequest({
             requestId: requestId,
             beneficiary: accountOne,
             stakeToken: address(lpiToken),

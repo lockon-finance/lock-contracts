@@ -7,11 +7,13 @@ import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {LockStaking} from "../contracts/LockStaking.sol";
 import {LockonVesting} from "../contracts/LockonVesting.sol";
 import {LockToken} from "../contracts/LockToken.sol";
+import {LockSigUtils} from "./LockSigUtil.sol";
 
 contract LockStakingTest is Test {
     LockStaking public lockStaking;
     LockToken public lockToken;
     LockonVesting public lockonVesting;
+    LockSigUtils internal sigUtils;
     uint256 constant validatorPrivateKey = 123;
     address public constant owner = address(bytes20(bytes("owner")));
     address public constant accountOne = address(1);
@@ -39,6 +41,7 @@ contract LockStakingTest is Test {
         lockonVesting.initialize(accountOne, address(lockToken));
         lockStaking.initialize(
             owner,
+            address(validator),
             address(lockonVesting),
             validator, // For testing, use validator as penalty fee receiver also
             address(lockToken),
@@ -47,6 +50,7 @@ contract LockStakingTest is Test {
             34730,
             2900
         );
+        sigUtils = new LockSigUtils(lockStaking.getDomainSeparator());
         // Transfer lock token to contract for reward distribution
         lockToken.transfer(address(lockStaking), 100000 ether);
         vm.stopPrank();
@@ -55,6 +59,12 @@ contract LockStakingTest is Test {
         lockToken.approve(address(validator), 100000 ether);
         vm.prank(accountOne);
         lockonVesting.addAddressDepositPermission(address(lockStaking));
+    }
+
+    function getSignatureFromVRS(uint8 v, bytes32 r, bytes32 s) internal pure returns (bytes memory) {
+        // v ++ (length(r) + 0x80 ) ++ r ++ (length(s) + 0x80) ++ s
+        // v ++ r ++ s
+        return abi.encodePacked(r, s, v);
     }
 
     function test_add_lock_token() public {
@@ -121,6 +131,7 @@ contract LockStakingTest is Test {
         lockonVesting.initialize(accountOne, address(lockToken));
         lockStaking.initialize(
             owner,
+            validator, // validator to check and sign signature
             address(lockonVesting),
             validator,
             address(lockToken),
@@ -209,7 +220,7 @@ contract LockStakingTest is Test {
             )
         );
         // Check for emitted event
-        assertEq(entries[1].topics[0], keccak256("ExtendLockDuration(address,uint256,uint256,uint256,uint256)"));
+        assertEq(entries[2].topics[0], keccak256("ExtendLockDuration(address,uint256,uint256,uint256,uint256)"));
     }
 
     function test_extend_lock_duration_fail() public {
@@ -264,7 +275,7 @@ contract LockStakingTest is Test {
         assertEq(validatorBalanceAfter, validatorBalanceBefore + penaltyFee);
         assertEq(accountOneBalanceAfter, accountOneBalanceBefore + lockAmount - penaltyFee);
         // Check for emitted event, since the penalty is applied, there will be 7 more event emitted before the withdraw event is emitted
-        assertEq(entries[3].topics[0], keccak256("WithdrawLockToken(address,uint256,uint256,uint256)"));
+        assertEq(entries[4].topics[0], keccak256("WithdrawLockToken(address,uint256,uint256,uint256)"));
         // Lock another one Lock Token and then skip 200 days
         lockToken.approve(address(lockStaking), 1 ether);
         lockStaking.addLockToken(lockAmount, 200 days);
@@ -299,9 +310,36 @@ contract LockStakingTest is Test {
         lockStaking.withdrawLockToken(10 ether);
     }
 
+    function test_set_validator_fail() public {
+        lockonVesting.initialize(accountOne, address(lockToken));
+        lockStaking.initialize(
+            owner,
+            validator, // validator to check and sign signature
+            address(lockonVesting),
+            validator, // For testing, use validator as penalty fee receiver also
+            address(lockToken),
+            0,
+            100000 ether,
+            347300,
+            1000
+        );
+        vm.startPrank(owner);
+        vm.expectRevert("LOCK Staking: Zero address not allowed");
+        // Set validator address
+        lockStaking.setValidatorAddress(address(0));
+    }
+
     function test_claim_pending_reward() public {
         initilizeAndConfig();
         uint256 lockAmountLocal = 10 ether;
+        uint256 rewardAmount = 20 ether;
+        string memory requestId = "lockStakingClaimOrder#1";
+        LockSigUtils.ClaimRequest memory claimRequest =
+            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: accountOne, rewardAmount: rewardAmount});
+        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(validatorPrivateKey, digest);
+        bytes memory signature = getSignatureFromVRS(v, r, s);
+        // Using account one with generated signature from validator address to claim reward
         vm.startPrank(accountOne);
         lockToken.approve(address(lockStaking), lockAmountLocal);
         lockStaking.addLockToken(lockAmountLocal, 100 days);
@@ -309,11 +347,36 @@ contract LockStakingTest is Test {
         uint256 lockonVestingBalanceBefore = lockToken.balanceOf(address(lockonVesting));
         uint256 pendingReward = lockStaking.pendingReward(accountOne);
         vm.recordLogs();
-        lockStaking.claimPendingReward();
+        lockStaking.claimPendingReward(requestId, rewardAmount, signature);
         vm.roll(block.number + 1);
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        assertEq(lockToken.balanceOf(address(lockonVesting)), lockonVestingBalanceBefore + pendingReward);
-        assertEq(entries[3].topics[0], keccak256("ClaimLockStakingReward(address,uint256,uint256)"));
+        assertEq(lockToken.balanceOf(address(lockonVesting)), lockonVestingBalanceBefore + pendingReward + rewardAmount);
+        assertEq(entries[4].topics[0], keccak256("ClaimLockStakingReward(address,string,uint256,uint256,uint256)"));
+    }
+
+    function test_claim_pending_reward_fail() public {
+        initilizeAndConfig();
+        uint256 lockAmountLocal = 10 ether;
+        uint256 rewardAmount = 20 ether;
+        string memory requestId = "lockStakingClaimOrder#1";
+        LockSigUtils.ClaimRequest memory claimRequest =
+            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: accountOne, rewardAmount: rewardAmount});
+        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(validatorPrivateKey, digest);
+        bytes memory signature = getSignatureFromVRS(v, r, s);
+        // Using account one with generated signature from validator address to claim reward
+        vm.startPrank(accountOne);
+        vm.expectRevert("LOCK Staking: Nothing to claim");
+        lockStaking.claimPendingReward(requestId, rewardAmount, signature);
+        lockToken.approve(address(lockStaking), lockAmountLocal);
+        lockStaking.addLockToken(lockAmountLocal, 100 days);
+        skip(100 days);
+        vm.expectRevert("LOCK Staking: Invalid signature");
+        lockStaking.claimPendingReward(requestId, rewardAmount + 1, signature);
+
+        lockStaking.claimPendingReward(requestId, rewardAmount, signature);
+        vm.expectRevert("LOCK Staking: Request already processed");
+        lockStaking.claimPendingReward(requestId, rewardAmount, signature);
     }
 
     function test_set_fee_receiver_address() public {
@@ -370,12 +433,15 @@ contract LockStakingTest is Test {
         assertEq(lockStaking.minimumLockDuration(), 35600);
         lockStaking.setPenaltyRate(2000);
         assertEq(lockStaking.penaltyRate(), 2000);
+        lockStaking.setValidatorAddress(accountTwo);
+        assertEq(lockStaking.validatorAddress(), accountTwo);
         vm.roll(block.number + 1);
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        assertEq(entries[0].topics[0], keccak256("BasicRateDividerUpdated(uint256,uint256)"));
+        assertEq(entries[0].topics[0], keccak256("BasicRateDividerUpdated(uint256,uint256,uint256,uint256,uint256)"));
         assertEq(entries[1].topics[0], keccak256("BonusRatePerSecondUpdated(uint256,uint256,uint256,uint256,uint256)"));
         assertEq(entries[2].topics[0], keccak256("MinimumLockDurationUpdated(uint256,uint256)"));
         assertEq(entries[3].topics[0], keccak256("PenaltyRateUpdated(uint256,uint256)"));
+        assertEq(entries[4].topics[0], keccak256("ValidatorAddressUpdated(address,uint256)"));
     }
 
     function test_view_function() public {
@@ -403,10 +469,25 @@ contract LockStakingTest is Test {
         lockStaking.getRewardMultiplier(1, 100000 days);
     }
 
+    function test_allocate_token() public {
+        initilizeAndConfig();
+        uint256 oldLockBalance = lockToken.balanceOf(address(lockStaking));
+        // Using account one
+        vm.startPrank(owner);
+        vm.recordLogs();
+        // Allocate amount of lock token
+        lockToken.approve(address(lockStaking), lockAmount);
+        lockStaking.allocateLockToken(lockAmount);
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        assertEq(entries[2].topics[0], keccak256("LockTokenAllocated(address,uint256)"));
+        assertEq(lockToken.balanceOf(address(lockStaking)), oldLockBalance + lockAmount);
+    }
+
     function test_update_pool_failed() public {
         lockonVesting.initialize(accountOne, address(lockToken));
         lockStaking.initialize(
             owner,
+            validator, // validator to check and sign signature
             address(lockonVesting),
             validator, // For testing, use validator as penalty fee receiver also
             address(lockToken),
@@ -428,6 +509,7 @@ contract LockStakingTest is Test {
         lockonVesting.initialize(accountOne, address(lockToken));
         lockStaking.initialize(
             owner,
+            validator, // validator to check and sign signature
             address(lockonVesting),
             validator, // For testing, use validator as penalty fee receiver also
             address(lockToken),
@@ -436,6 +518,16 @@ contract LockStakingTest is Test {
             34730,
             2900
         );
+        sigUtils = new LockSigUtils(lockStaking.getDomainSeparator());
+
+        // Initalize signature for claim reward
+        uint256 rewardAmount = 20 ether;
+        string memory requestId = "lockStakingClaimOrder#1";
+        LockSigUtils.ClaimRequest memory claimRequest =
+            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: accountOne, rewardAmount: rewardAmount});
+        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(validatorPrivateKey, digest);
+        bytes memory signature = getSignatureFromVRS(v, r, s);
         // Transfer lock token to contract for reward distribution
         lockToken.transfer(address(lockStaking), 100000 ether);
         // Using account one
@@ -447,7 +539,61 @@ contract LockStakingTest is Test {
         lockStaking.addLockToken(lockAmount, 200 days);
         // Since the lock staking contract is not set, all next tx will be revert
         vm.expectRevert("LOCKON Vesting: Forbidden");
-        lockStaking.claimPendingReward();
+        lockStaking.claimPendingReward(requestId, rewardAmount, signature);
+    }
+
+    function test_cancel_claim_order() public {
+        initilizeAndConfig();
+        uint256 stakeAmount = 10 ether;
+        uint256 rewardAmount = 1 ether;
+        string memory requestId = "lockStakingClaimOrder#1";
+        LockSigUtils.ClaimRequest memory claimRequest =
+            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: accountOne, rewardAmount: rewardAmount});
+        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(validatorPrivateKey, digest);
+
+        bytes memory signature = getSignatureFromVRS(v, r, s);
+        // Using account one with generated signature
+        vm.startPrank(accountOne);
+        lockToken.approve(address(lockStaking), stakeAmount);
+        lockStaking.addLockToken(stakeAmount, 100 days);
+        vm.recordLogs();
+        lockStaking.cancelClaimOrder(requestId, rewardAmount, signature);
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        assertEq(entries[0].topics[0], keccak256("ClaimOrderCancel(address,string)"));
+        // Make sure that the requestId cannot be claimed after cancel
+        vm.expectRevert("LOCK Staking: Request already processed");
+        lockStaking.claimPendingReward(requestId, rewardAmount, signature);
+    }
+
+    function test_cancel_claim_order_fail() public {
+        initilizeAndConfig();
+        uint256 stakeAmount = 10 ether;
+        uint256 rewardAmount = 1 ether;
+        string memory requestId = "lockStakingClaimOrder#1";
+        LockSigUtils.ClaimRequest memory claimRequest =
+            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: accountOne, rewardAmount: rewardAmount});
+        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(validatorPrivateKey, digest);
+
+        bytes memory signature = getSignatureFromVRS(v, r, s);
+        // User not stake any Lock Token but still call to cancel claim
+        vm.prank(accountOne);
+        vm.expectRevert("LOCK Staking: User hasn't staked any token yet");
+        lockStaking.cancelClaimOrder(requestId, rewardAmount, signature);
+        // Account two using signature that is generated for account one
+        vm.startPrank(accountTwo);
+        lockToken.approve(address(lockStaking), stakeAmount);
+        lockStaking.addLockToken(stakeAmount, 100 days);
+        vm.expectRevert("LOCK Staking: Invalid signature");
+        lockStaking.cancelClaimOrder(requestId, rewardAmount, signature);
+        // Reward that already claimed cannot be cancelled
+        vm.startPrank(accountOne);
+        lockToken.approve(address(lockStaking), stakeAmount);
+        lockStaking.addLockToken(stakeAmount, 100 days);
+        lockStaking.claimPendingReward(requestId, rewardAmount, signature);
+        vm.expectRevert("LOCK Staking: Request already processed");
+        lockStaking.cancelClaimOrder(requestId, rewardAmount, signature);
     }
 
     function test_pause_and_unpause() public {
@@ -463,8 +609,15 @@ contract LockStakingTest is Test {
         lockStaking.extendLockDuration(200 days);
         vm.expectRevert(EnforcedPause.selector);
         lockStaking.withdrawLockToken(1);
+        uint256 rewardAmount = 20 ether;
+        string memory requestId = "indexStakingClaimOrder#1";
+        LockSigUtils.ClaimRequest memory claimRequest =
+            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: accountOne, rewardAmount: rewardAmount});
+        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(validatorPrivateKey, digest);
+        bytes memory signature = getSignatureFromVRS(v, r, s);
         vm.expectRevert(EnforcedPause.selector);
-        lockStaking.claimPendingReward();
+        lockStaking.claimPendingReward(requestId, rewardAmount, signature);
         vm.stopPrank();
         // Transaction can be executed normal when unpause
         vm.prank(owner);
@@ -504,5 +657,24 @@ contract LockStakingTest is Test {
         uint256 rewardDebt
     ) public pure returns (uint256) {
         return ((lockScore * rewardPerScore) / precision) - rewardDebt;
+    }
+
+    function test_get_signer_for_request() public {
+        initilizeAndConfig();
+        uint256 rewardAmount = 10 ether;
+        string memory requestId = "lockStakingClaimOrder#1";
+        LockSigUtils.ClaimRequest memory claimRequest =
+            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: accountOne, rewardAmount: rewardAmount});
+        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(validatorPrivateKey, digest);
+
+        bytes memory signature = getSignatureFromVRS(v, r, s);
+        // Using account one with generated signature
+        vm.startPrank(accountOne);
+        lockToken.approve(address(lockStaking), lockAmount);
+        lockStaking.addLockToken(lockAmount, 100 days);
+        skip(100 days);
+        address signer = lockStaking.getSignerForRequest(requestId, accountOne, rewardAmount, signature);
+        assertEq(signer, validator);
     }
 }
