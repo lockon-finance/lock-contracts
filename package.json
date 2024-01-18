@@ -4,10 +4,13 @@
   "license": "MIT",
   "version": "0.1.1",
   "scripts": {
-    "compile": "npx hardhat compile",
-    "test": "npx hardhat test",
+    "compile": "forge compile",
+    "fmt": "forge fmt",
+    "test": "forge test",
+    "coverage": "forge coverage",
     "deploy:dev_goerli": "NODE_ENV=dev npx hardhat run --network goerli",
-    "deploy:dev_polygon": "NODE_ENV=dev npx hardhat run --network mumbai"
+    "deploy:stg_polygon": "NODE_ENV=stg npx hardhat run --network polygon",
+    "deploy:prod_polygon": "NODE_ENV=prod npx hardhat run --network polygon"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",

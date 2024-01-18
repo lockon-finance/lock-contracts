@@ -1,8 +1,9 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import { getContracts, saveContract } from "./utils/deploy-helper";
+import {getContracts, getEnvParams, saveContract} from "./utils/deploy-helper";
 
 async function main() {
+  const envParams = getEnvParams();
   const contracts = getContracts(network.name)[network.name];
   const LockStaking = await ethers.getContractFactory("LockStaking");
 
@@ -14,9 +15,9 @@ async function main() {
 
   const lockStaking = await defender.deployProxy(LockStaking, [
     upgradeApprovalProcess.address,
-    upgradeApprovalProcess.address,
+    envParams.operatorAddress,
     contracts.lockonVesting,
-    contracts.feeReceiver,
+    envParams.feeReceiverAddress,
     contracts.lockToken,
     1700739080, // Staking start timestamp
     BigInt(4 * 10 ** 8) * BigInt(10 ** 18), // Number of lock tokens to use as lock staking reward
@@ -30,8 +31,6 @@ async function main() {
   saveContract(network.name, "lockStaking", lockStakingAddr);
 }
 
-// We recommend this pattern to be able to use async/await everywhere
-// and properly handle errors.
 main().catch((error) => {
   console.error(error);
   process.exitCode = 1;

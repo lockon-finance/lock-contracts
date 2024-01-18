@@ -1,8 +1,9 @@
 import { ethers, network, run, upgrades, defender } from "hardhat";
 
-import { getContracts, saveContract } from "./utils/deploy-helper";
+import {getContracts, getEnvParams, saveContract} from "./utils/deploy-helper";
 
 async function main() {
+  const envParams = getEnvParams();
   const contracts = getContracts(network.name)[network.name];
 
   const LockonVesting = await ethers.getContractFactory("LockonVesting");
@@ -28,8 +29,6 @@ async function main() {
   saveContract(network.name, "lockonVesting", lockonVestingAddr);
 }
 
-// We recommend this pattern to be able to use async/await everywhere
-// and properly handle errors.
 main().catch((error) => {
   console.error(error);
   process.exitCode = 1;

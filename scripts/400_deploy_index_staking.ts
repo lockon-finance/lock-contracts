@@ -1,8 +1,9 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import { getContracts, saveContract } from "./utils/deploy-helper";
+import {getContracts, getEnvParams, saveContract} from "./utils/deploy-helper";
 
 async function main() {
+  const envParams = getEnvParams();
   const contracts = getContracts(network.name)[network.name];
   const IndexStaking = await ethers.getContractFactory("IndexStaking");
 
@@ -12,18 +13,16 @@ async function main() {
     throw new Error(`Upgrade approval process with id ${upgradeApprovalProcess.approvalProcessId} has no assigned address`);
   }
 
+  const timestamp = Math.floor(Date.now() / 1000)
   const indexStaking = await defender.deployProxy(IndexStaking, [
     upgradeApprovalProcess.address,
-    upgradeApprovalProcess.address,
+    envParams.operatorAddress,
     contracts.lockonVesting,
     contracts.lockToken,
     BigInt(2 * 10 ** 9) * BigInt(10 ** 18), // Number of lock tokens to use as index staking reward
-    "INDEX_STAKING", 
+    "INDEX_STAKING",
     "1",
-    [
-      [contracts.LPIToken, Math.floor(Date.now() / 1000)], // First pool info
-      [contracts.LBIToken, Math.floor(Date.now() / 1000)] // Second pool info
-    ], 
+    envParams.initialIndexTokenAddresses.map(address => [address, timestamp]), // Initial pool info (Index token address, timestamp)
   ], { initializer: "initialize", kind: "uups" });
 
   await indexStaking.waitForDeployment();
@@ -31,8 +30,6 @@ async function main() {
   console.log("Index Staking contract deployed to address:", indexStakingAddr);
   saveContract(network.name, "indexStaking", indexStakingAddr);
 }
-// We recommend this pattern to be able to use async/await everywhere
-// and properly handle errors.
 main().catch((error) => {
   console.error(error);
   process.exitCode = 1;

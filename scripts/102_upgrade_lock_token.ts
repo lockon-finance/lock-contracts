@@ -1,8 +1,9 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import { getContracts } from "./utils/deploy-helper";
+import {getContracts, getEnvParams} from "./utils/deploy-helper";
 
 async function main() {
+  const envParams = getEnvParams();
   const contracts = getContracts(network.name)[network.name];
 
   const LockToken = await ethers.getContractFactory("LockToken");

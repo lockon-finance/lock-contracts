@@ -1,8 +1,9 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import { getContracts, saveContract } from "./utils/deploy-helper";
+import {getContracts, getEnvParams, saveContract} from "./utils/deploy-helper";
 
 async function main() {
+  const envParams = getEnvParams();
   const contracts = getContracts(network.name)[network.name];
 
   const LockToken = await ethers.getContractFactory("LockToken");
@@ -13,19 +14,18 @@ async function main() {
   }
 
   const lockToken = await defender.deployProxy(LockToken, [
-    "LockToken",
-    "LOCK",
+    envParams.lockTokenName,
+    envParams.lockTokenSymbol,
     upgradeApprovalProcess.address, // multisig address
-    contracts.operatorAddress,
-  ], { initializer: "initialize", kind: "uups" });
+    envParams.operatorAddress,
+  ], { initializer: "initialize", kind: "uups"});
 
   await lockToken.waitForDeployment();
-  console.log("Lock Token contract deployed to address:", await lockToken.getAddress());
-  saveContract(network.name, "lockToken", await lockToken.getAddress());
+  const lockTokenAddr = await lockToken.getAddress();
+  console.log("Lock Token contract deployed to address:", lockTokenAddr);
+  saveContract(network.name, "lockToken", lockTokenAddr);
 }
 
-// We recommend this pattern to be able to use async/await everywhere
-// and properly handle errors.
 main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
