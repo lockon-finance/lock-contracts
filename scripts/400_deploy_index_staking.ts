@@ -1,6 +1,6 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import {getContracts, getEnvParams, saveContract} from "./utils/deploy-helper";
+import { getContracts, getEnvParams, saveContract } from "./utils/deploy-helper";
 
 async function main() {
   const envParams = getEnvParams();

@@ -6,6 +6,7 @@ export function getEnvParams() {
   const lockTokenSymbol = process.env.LOCK_TOKEN_SYMBOL;
   const operatorAddress = process.env.OPERATOR_ADDRESS;
   const feeReceiverAddress = process.env.FEE_RECEIVER_ADDRESS;
+  const merkleRoot = process.env.MERKLE_ROOT;
   const initialIndexTokenAddresses = process.env.INITIAL_INDEX_TOKEN_ADDRESSES;
   if (!lockTokenName || !lockTokenSymbol || !operatorAddress || !feeReceiverAddress || !initialIndexTokenAddresses) {
     throw new Error(
@@ -20,6 +21,7 @@ export function getEnvParams() {
     lockTokenSymbol,
     operatorAddress,
     feeReceiverAddress,
+    merkleRoot,
     initialIndexTokenAddresses: initialIndexTokenAddressArray,
   }
 
