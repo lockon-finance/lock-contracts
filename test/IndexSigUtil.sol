@@ -8,13 +8,15 @@ contract IndexSigUtils {
         DOMAIN_SEPARATOR = _DOMAIN_SEPARATOR;
     }
 
-    bytes32 public constant CLAIM_REQUEST_TYPEHASH =
-        keccak256("ClaimRequest(string requestId,address beneficiary,address stakeToken,uint256 claimAmount)");
+    bytes32 public constant CLAIM_REQUEST_TYPEHASH = keccak256(
+        "ClaimRequest(string requestId,address beneficiary,address stakeToken,uint256 cumulativePendingReward,uint256 claimAmount)"
+    );
 
     struct ClaimRequest {
         string requestId; // An ID for the staking reward claim request
         address beneficiary; // The address of the beneficiary of the staking reward
         address stakeToken; // The address of the stake token of the staking pool
+        uint256 cumulativePendingReward; // Pending reward accumulated each time an user deposit or withdraw
         uint256 claimAmount; // The amount of reward tokens to be claimed
     }
 
@@ -26,6 +28,7 @@ contract IndexSigUtils {
                 keccak256(bytes(_claimRequest.requestId)),
                 _claimRequest.beneficiary,
                 _claimRequest.stakeToken,
+                _claimRequest.cumulativePendingReward,
                 _claimRequest.claimAmount
             )
         );

@@ -7,8 +7,8 @@ async function main() {
   const contracts = getContracts(network.name)[network.name];
   const IndexStaking = await ethers.getContractFactory("IndexStaking");
   const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
-
-  const startTimestamp = Math.floor(Date.now() / 1000)
+  const startTimestamp = Math.floor(Date.now() / 1000);
+  const bonusRatePerSecond = 2300 // (decimals=1e12)
   const indexStaking = await defender.deployProxy(IndexStaking, [
     ownerAddress,
     envParams.operatorAddress,
@@ -17,7 +17,8 @@ async function main() {
     BigInt(2 * 10 ** 9) * BigInt(10 ** 18), // Number of lock tokens to use as index staking reward
     "INDEX_STAKING",
     "1",
-    envParams.initialIndexTokenAddresses.map(address => [address, startTimestamp]), // Initial pool info (Index token address, timestamp)
+    // Initial pool info (Index token address, bonusRatePerSecond, startTimestamp)
+    envParams.initialIndexTokenAddresses.map(address => [address, bonusRatePerSecond, startTimestamp]),
   ], { initializer: "initialize", kind: "uups" });
 
   await indexStaking.waitForDeployment();

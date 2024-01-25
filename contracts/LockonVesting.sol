@@ -54,7 +54,7 @@ contract LockonVesting is
     mapping(uint256 => uint256) public vestingCategories;
     // Mapping of user address to VestingWallet struct based on vesting category id, which stores vesting information
     mapping(address => mapping(uint256 => VestingWallet)) public userVestingWallet;
-    // Mapping that keeps track of whether each address is allowed to receive to deposit to LOCKON Vesting contract
+    // Mapping that keeps track of whether each address is allowed to deposit to LOCKON Vesting contract
     mapping(address => bool) public isAllowedDeposit;
     // Mapping that keeps track of whether each address is banned from all activities in LOCKON Vesting
     mapping(address => bool) public isBlacklistUser;
@@ -278,34 +278,44 @@ contract LockonVesting is
     /* ============ PRIVILEGED OWNER / GOVERNANCE Functions ============ */
     /**
      * @dev Add address to list allowed deposit address
-     * @param _addr Address
+     * @param _permissionedAddress Address to allow deposit
      */
-    function addAddressDepositPermission(address _addr) external onlyOwner {
-        require(_addr != address(0), "LOCKON Vesting: Zero address not allowed");
-        require(!isAllowedDeposit[_addr], "LOCKON Vesting: List allowed deposit address already contains this address");
-        listAllowedDeposit.push(_addr);
-        allowedDepositOneBasedIndexes[_addr] = listAllowedDeposit.length;
-        isAllowedDeposit[_addr] = true;
-        emit DepositPermissionStatusUpdated(_addr, isAllowedDeposit[_addr], block.timestamp);
+    function addAddressDepositPermission(address _permissionedAddress) external onlyOwner {
+        require(_permissionedAddress != address(0), "LOCKON Vesting: Zero address not allowed");
+        require(
+            !isAllowedDeposit[_permissionedAddress],
+            "LOCKON Vesting: List allowed deposit address already contains this address"
+        );
+        listAllowedDeposit.push(_permissionedAddress);
+        allowedDepositOneBasedIndexes[_permissionedAddress] = listAllowedDeposit.length;
+        isAllowedDeposit[_permissionedAddress] = true;
+        emit DepositPermissionStatusUpdated(
+            _permissionedAddress, isAllowedDeposit[_permissionedAddress], block.timestamp
+        );
     }
 
     /**
      * @dev Remove address from list allowed deposit address
-     * @param _addr Address
+     * @param _permissionedAddress Address to remove deposit permission
      */
-    function removeAddressDepositPermission(address _addr) external onlyOwner {
-        require(_addr != address(0), "LOCKON Vesting: Zero address not allowed");
-        require(isAllowedDeposit[_addr], "LOCKON Vesting: List allowed deposit address does not contain this address");
+    function removeAddressDepositPermission(address _permissionedAddress) external onlyOwner {
+        require(_permissionedAddress != address(0), "LOCKON Vesting: Zero address not allowed");
+        require(
+            isAllowedDeposit[_permissionedAddress],
+            "LOCKON Vesting: List allowed deposit address does not contain this address"
+        );
         uint256 len = listAllowedDeposit.length;
-        uint256 index = allowedDepositOneBasedIndexes[_addr];
+        uint256 index = allowedDepositOneBasedIndexes[_permissionedAddress];
         address lastValue = listAllowedDeposit[len - 1];
         listAllowedDeposit[index - 1] = lastValue;
         allowedDepositOneBasedIndexes[lastValue] = index;
         // delete the index
-        delete allowedDepositOneBasedIndexes[_addr];
+        delete allowedDepositOneBasedIndexes[_permissionedAddress];
         listAllowedDeposit.pop();
-        isAllowedDeposit[_addr] = false;
-        emit DepositPermissionStatusUpdated(_addr, isAllowedDeposit[_addr], block.timestamp);
+        isAllowedDeposit[_permissionedAddress] = false;
+        emit DepositPermissionStatusUpdated(
+            _permissionedAddress, isAllowedDeposit[_permissionedAddress], block.timestamp
+        );
     }
 
     /**
@@ -340,34 +350,34 @@ contract LockonVesting is
 
     /**
      * @dev Add address to list banned address
-     * @param _addr Address
+     * @param _userAddress Blacklist Address
      */
-    function addBlacklistUser(address _addr) external onlyOwner {
-        require(_addr != address(0), "LOCKON Vesting: Zero address not allowed");
-        require(!isBlacklistUser[_addr], "LOCKON Vesting: Blacklist already contains this address");
-        blacklist.push(_addr);
-        blacklistOneBasedIndexes[_addr] = blacklist.length;
-        isBlacklistUser[_addr] = true;
-        emit UserBlacklistUserAdded(_addr, isBlacklistUser[_addr], block.timestamp);
+    function addBlacklistUser(address _userAddress) external onlyOwner {
+        require(_userAddress != address(0), "LOCKON Vesting: Zero address not allowed");
+        require(!isBlacklistUser[_userAddress], "LOCKON Vesting: Blacklist already contains this address");
+        blacklist.push(_userAddress);
+        blacklistOneBasedIndexes[_userAddress] = blacklist.length;
+        isBlacklistUser[_userAddress] = true;
+        emit UserBlacklistUserAdded(_userAddress, isBlacklistUser[_userAddress], block.timestamp);
     }
 
     /**
      * @dev Remove address from list banned address
-     * @param _addr Address
+     * @param _userAddress Address to remove from blacklist
      */
-    function removeBlacklistUser(address _addr) external onlyOwner {
-        require(_addr != address(0), "LOCKON Vesting: Zero address not allowed");
-        require(isBlacklistUser[_addr], "LOCKON Vesting: Blacklist does not contain this address");
+    function removeBlacklistUser(address _userAddress) external onlyOwner {
+        require(_userAddress != address(0), "LOCKON Vesting: Zero address not allowed");
+        require(isBlacklistUser[_userAddress], "LOCKON Vesting: Blacklist does not contain this address");
         uint256 len = blacklist.length;
-        uint256 index = blacklistOneBasedIndexes[_addr];
+        uint256 index = blacklistOneBasedIndexes[_userAddress];
         address lastValue = blacklist[len - 1];
         blacklist[index - 1] = lastValue;
         blacklistOneBasedIndexes[lastValue] = index;
         // delete the index
-        delete blacklistOneBasedIndexes[_addr];
+        delete blacklistOneBasedIndexes[_userAddress];
         blacklist.pop();
-        isBlacklistUser[_addr] = false;
-        emit UserBlacklistUserRemoved(_addr, isBlacklistUser[_addr], block.timestamp);
+        isBlacklistUser[_userAddress] = false;
+        emit UserBlacklistUserRemoved(_userAddress, isBlacklistUser[_userAddress], block.timestamp);
     }
 
     /**

@@ -271,12 +271,20 @@ contract LockStaking is
     event ClaimOrderCancel(address indexed sender, string requestId);
 
     /**
-     * Emitted when the admin allocates an amount of lock tokens to the contract
+     * Emitted when the admin allocates an amount of LOCK tokens to the contract
      *
-     * @param owner Address of the owner to allocate lock tokens
-     * @param amount Amount of lock tokens that are allocated
+     * @param owner Address of the owner to allocate LOCK tokens
+     * @param amount Amount of LOCK tokens that are allocated
      */
     event LockTokenAllocated(address owner, uint256 amount);
+
+    /**
+     * Emitted when the admin withdraw an amount of LOCK tokens from the contract
+     *
+     * @param owner Address of the owner to withdraw LOCK tokens
+     * @param amount Amount of LOCK tokens that are deallocated
+     */
+    event LockTokenDeallocated(address owner, uint256 amount);
 
     /**
      * Initializes the LOCK Staking contract
@@ -302,6 +310,7 @@ contract LockStaking is
         uint256 _basicRateDivider,
         uint256 _bonusRatePerSecond
     ) public initializer {
+        require(_bonusRatePerSecond != 0, "LOCK Staking: Bonus rate per second must be greater than 0");
         // Initialize the contract and set the owner
         // This function should be called only once during deployment
         __Ownable_init_unchained(_owner);
@@ -417,7 +426,7 @@ contract LockStaking is
      * amount.
      */
     function updatePool() public {
-        if (block.timestamp <= lastRewardTimestamp) {
+        if (block.timestamp <= startTimestamp) {
             return;
         }
         if (totalLockScore == 0) {
@@ -731,6 +740,7 @@ contract LockStaking is
      * @param _bonusRatePerSecond The new value for the second bonus rate
      */
     function setBonusRatePerSecond(uint256 _bonusRatePerSecond) external onlyOwner {
+        require(_bonusRatePerSecond != 0, "LOCK Staking: Bonus rate per second must be greater than 0");
         updatePool();
         bonusRatePerSecond = _bonusRatePerSecond;
         emit BonusRatePerSecondUpdated(
@@ -766,6 +776,16 @@ contract LockStaking is
     function allocateLockToken(uint256 _lockAmount) external onlyOwner nonReentrant {
         lockToken.safeTransferFrom(msg.sender, address(this), _lockAmount);
         emit LockTokenAllocated(msg.sender, _lockAmount);
+    }
+
+    /**
+     * @dev Allows the owner to withdraw LOCK tokens from contract LOCK staking
+     *
+     * @param _lockAmount The LOCK token amount to be withdrawn
+     */
+    function deallocateLockToken(uint256 _lockAmount) external onlyOwner nonReentrant {
+        lockToken.safeTransfer(msg.sender, _lockAmount);
+        emit LockTokenDeallocated(msg.sender, _lockAmount);
     }
 
     /**

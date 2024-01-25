@@ -51,7 +51,7 @@ contract LockStakingTest is Test {
             2900
         );
         sigUtils = new LockSigUtils(lockStaking.getDomainSeparator());
-        // Transfer lock token to contract for reward distribution
+        // Transfer LOCK token to contract for reward distribution
         lockToken.transfer(address(lockStaking), 100000 ether);
         vm.stopPrank();
         // Approve to pay reward
@@ -65,6 +65,21 @@ contract LockStakingTest is Test {
         // v ++ (length(r) + 0x80 ) ++ r ++ (length(s) + 0x80) ++ s
         // v ++ r ++ s
         return abi.encodePacked(r, s, v);
+    }
+
+    function test_initialize_fail() public {
+        vm.expectRevert("LOCK Staking: Bonus rate per second must be greater than 0");
+        lockStaking.initialize(
+            owner,
+            address(validator),
+            address(lockonVesting),
+            validator, // For testing, use validator as penalty fee receiver also
+            address(lockToken),
+            0,
+            100000 ether,
+            34730,
+            0
+        );
     }
 
     function test_add_lock_token() public {
@@ -444,6 +459,13 @@ contract LockStakingTest is Test {
         assertEq(entries[4].topics[0], keccak256("ValidatorAddressUpdated(address,uint256)"));
     }
 
+    function test_set_bonus_rate_per_second_fail() public {
+        initilizeAndConfig();
+        vm.expectRevert("LOCK Staking: Bonus rate per second must be greater than 0");
+        vm.prank(owner);
+        lockStaking.setBonusRatePerSecond(0);
+    }
+
     function test_view_function() public {
         initilizeAndConfig();
         vm.startPrank(owner);
@@ -475,12 +497,26 @@ contract LockStakingTest is Test {
         // Using account one
         vm.startPrank(owner);
         vm.recordLogs();
-        // Allocate amount of lock token
+        // Allocate amount of LOCK token
         lockToken.approve(address(lockStaking), lockAmount);
         lockStaking.allocateLockToken(lockAmount);
         Vm.Log[] memory entries = vm.getRecordedLogs();
         assertEq(entries[2].topics[0], keccak256("LockTokenAllocated(address,uint256)"));
         assertEq(lockToken.balanceOf(address(lockStaking)), oldLockBalance + lockAmount);
+    }
+
+    function test_deallocate_token() public {
+        initilizeAndConfig();
+        uint256 oldLockBalance = lockToken.balanceOf(address(lockStaking));
+        // Using account one
+        vm.startPrank(owner);
+        vm.recordLogs();
+        // Deallocate amount of LOCK token
+        lockToken.approve(address(lockStaking), lockAmount);
+        lockStaking.deallocateLockToken(lockAmount);
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        assertEq(entries[2].topics[0], keccak256("LockTokenDeallocated(address,uint256)"));
+        assertEq(lockToken.balanceOf(address(lockStaking)), oldLockBalance - lockAmount);
     }
 
     function test_update_pool_failed() public {
@@ -528,7 +564,7 @@ contract LockStakingTest is Test {
         bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(validatorPrivateKey, digest);
         bytes memory signature = getSignatureFromVRS(v, r, s);
-        // Transfer lock token to contract for reward distribution
+        // Transfer LOCK token to contract for reward distribution
         lockToken.transfer(address(lockStaking), 100000 ether);
         // Using account one
         vm.startPrank(accountOne);
@@ -537,7 +573,7 @@ contract LockStakingTest is Test {
         lockStaking.addLockToken(lockAmount, 200 days);
         skip(1 days);
         lockStaking.addLockToken(lockAmount, 200 days);
-        // Since the lock staking contract is not set, all next tx will be revert
+        // Since the LOCK staking contract is not set, all next tx will be revert
         vm.expectRevert("LOCKON Vesting: Forbidden");
         lockStaking.claimPendingReward(requestId, rewardAmount, signature);
     }
