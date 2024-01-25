@@ -1,28 +1,23 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import { getContracts, getEnvParams, saveContract } from "./utils/deploy-helper";
+import {getContracts, getEnvParams, saveContract, getDefenderUpgradeApprovalOwnerAddress} from "./utils/deploy-helper";
 
 async function main() {
   const envParams = getEnvParams();
   const contracts = getContracts(network.name)[network.name];
   const IndexStaking = await ethers.getContractFactory("IndexStaking");
+  const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
 
-  const upgradeApprovalProcess = await defender.getUpgradeApprovalProcess();
-
-  if (upgradeApprovalProcess.address === undefined) {
-    throw new Error(`Upgrade approval process with id ${upgradeApprovalProcess.approvalProcessId} has no assigned address`);
-  }
-
-  const timestamp = Math.floor(Date.now() / 1000)
+  const startTimestamp = Math.floor(Date.now() / 1000)
   const indexStaking = await defender.deployProxy(IndexStaking, [
-    upgradeApprovalProcess.address,
+    ownerAddress,
     envParams.operatorAddress,
     contracts.lockonVesting,
     contracts.lockToken,
     BigInt(2 * 10 ** 9) * BigInt(10 ** 18), // Number of lock tokens to use as index staking reward
     "INDEX_STAKING",
     "1",
-    envParams.initialIndexTokenAddresses.map(address => [address, timestamp]), // Initial pool info (Index token address, timestamp)
+    envParams.initialIndexTokenAddresses.map(address => [address, startTimestamp]), // Initial pool info (Index token address, timestamp)
   ], { initializer: "initialize", kind: "uups" });
 
   await indexStaking.waitForDeployment();

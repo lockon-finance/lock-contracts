@@ -1,26 +1,24 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import { getContracts, saveContract } from "./utils/deploy-helper";
+import {getContracts, getEnvParams, saveContract, getDefenderUpgradeApprovalOwnerAddress} from "./utils/deploy-helper";
 
 async function main() {
+  const envParams = getEnvParams();
   const contracts = getContracts(network.name)[network.name];
   const Airdrop = await ethers.getContractFactory("Airdrop");
-  const upgradeApprovalProcess = await defender.getUpgradeApprovalProcess();
+  const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
 
-  if (upgradeApprovalProcess.address === undefined) {
-    throw new Error(
-      `Upgrade approval process with id ${upgradeApprovalProcess.approvalProcessId} has no assigned address`
-    );
-  }
+  const startTimestamp = Math.floor(Date.now() / 1000)
   const airdrop = await defender.deployProxy(
     Airdrop,
     [
-      upgradeApprovalProcess.address,
+      ownerAddress,
       contracts.lockonVesting,
       contracts.lockToken,
-      1705739080, // Staking start timestamp
+      startTimestamp, // Airdrop start timestamp
     ],
     {
+      initializer: "initialize",
       kind: "uups",
     }
   );

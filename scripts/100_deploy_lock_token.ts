@@ -1,22 +1,18 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import {getContracts, getEnvParams, saveContract} from "./utils/deploy-helper";
+import {getContracts, getEnvParams, saveContract, getDefenderUpgradeApprovalOwnerAddress} from "./utils/deploy-helper";
 
 async function main() {
   const envParams = getEnvParams();
   const contracts = getContracts(network.name)[network.name];
 
   const LockToken = await ethers.getContractFactory("LockToken");
-  const upgradeApprovalProcess = await defender.getUpgradeApprovalProcess();
-
-  if (upgradeApprovalProcess.address === undefined) {
-    throw new Error(`Upgrade approval process with id ${upgradeApprovalProcess.approvalProcessId} has no assigned address`);
-  }
+  const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
 
   const lockToken = await defender.deployProxy(LockToken, [
     envParams.lockTokenName,
     envParams.lockTokenSymbol,
-    upgradeApprovalProcess.address, // multisig address
+    ownerAddress,
     envParams.operatorAddress,
   ], { initializer: "initialize", kind: "uups"});
 

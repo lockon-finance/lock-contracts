@@ -1,18 +1,26 @@
 import fs from "fs";
 import path from "path";
+import {defender} from "hardhat";
+
+function getEnv(name: string) {
+  return process.env[name];
+}
+
+function getEnvRequired(name: string): string {
+  const value = getEnv(name);
+  if (!value) {
+    throw new Error(`Please set the ${name} environment variable`);
+  }
+  return value;
+}
 
 export function getEnvParams() {
-  const lockTokenName = process.env.LOCK_TOKEN_NAME;
-  const lockTokenSymbol = process.env.LOCK_TOKEN_SYMBOL;
-  const operatorAddress = process.env.OPERATOR_ADDRESS;
-  const feeReceiverAddress = process.env.FEE_RECEIVER_ADDRESS;
-  const merkleRoot = process.env.MERKLE_ROOT;
-  const initialIndexTokenAddresses = process.env.INITIAL_INDEX_TOKEN_ADDRESSES;
-  if (!lockTokenName || !lockTokenSymbol || !operatorAddress || !feeReceiverAddress || !initialIndexTokenAddresses) {
-    throw new Error(
-      "Please set the LOCK_TOKEN_NAME, LOCK_TOKEN_SYMBOL, OPERATOR_ADDRESS, FEE_RECEIVER_ADDRESS, INITIAL_INDEX_TOKEN_ADDRESSES environment variables"
-    );
-  }
+  const lockTokenName = getEnvRequired("LOCK_TOKEN_NAME")
+  const lockTokenSymbol = getEnvRequired("LOCK_TOKEN_SYMBOL")
+  const operatorAddress = getEnvRequired("OPERATOR_ADDRESS")
+  const feeReceiverAddress = getEnvRequired("FEE_RECEIVER_ADDRESS")
+  const merkleRoot = getEnv("MERKLE_ROOT")
+  const initialIndexTokenAddresses = getEnvRequired("INITIAL_INDEX_TOKEN_ADDRESSES")
 
   const initialIndexTokenAddressArray = initialIndexTokenAddresses.split(",");
 
@@ -24,8 +32,21 @@ export function getEnvParams() {
     merkleRoot,
     initialIndexTokenAddresses: initialIndexTokenAddressArray,
   }
-
 }
+
+export async function getDefenderUpgradeApprovalOwnerAddress() {
+  const envOwnerAddress = getEnvRequired("OWNER_ADDRESS")
+  const approvalProcess = await defender.getUpgradeApprovalProcess()
+  if (approvalProcess.address !== envOwnerAddress) {
+    throw new Error(`Upgrade approval process with id ${approvalProcess.approvalProcessId} has an address ${approvalProcess.address} that does not match the expected owner address ${envOwnerAddress}.`);
+  }
+  return approvalProcess.address;
+}
+
+export async function validateDefenderUpgradeApprovalOwnerAddress() {
+  await getDefenderUpgradeApprovalOwnerAddress()
+}
+
 export function getContracts(network: any) {
   let json: string | Buffer;
   try {

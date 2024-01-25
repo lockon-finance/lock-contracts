@@ -1,26 +1,22 @@
 import { ethers, network, defender } from "hardhat";
 
-import { getContracts, saveContract, getEnvParams } from "./utils/deploy-helper";
+import {getContracts, saveContract, getEnvParams, getDefenderUpgradeApprovalOwnerAddress} from "./utils/deploy-helper";
 
 async function main() {
   const contracts = getContracts(network.name)[network.name];
   const envParams = getEnvParams();
-  const upgradeApprovalProcess = await defender.getUpgradeApprovalProcess();
+  const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
 
-  if (upgradeApprovalProcess.address === undefined) {
-    throw new Error(
-      `Upgrade approval process with id ${upgradeApprovalProcess.approvalProcessId} has no assigned address`
-    );
-  }
   const MerkleAirdrop = await ethers.getContractFactory("MerkleAirdrop");
+  const startTimestamp = Math.floor(Date.now() / 1000)
   const merkleAirdrop = await defender.deployProxy(
     MerkleAirdrop,
     [
-      upgradeApprovalProcess.address,
+      ownerAddress,
       contracts.lockonVesting,
       contracts.lockToken,
       envParams.merkleRoot,
-      1705739080, // Airdrop start timestamp
+      startTimestamp, // Airdrop start timestamp
     ],
     {
       initializer: "initialize",

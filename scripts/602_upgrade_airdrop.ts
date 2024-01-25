@@ -1,11 +1,12 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import { getContracts } from "./utils/deploy-helper";
+import {getContracts, validateDefenderUpgradeApprovalOwnerAddress} from "./utils/deploy-helper";
 
 async function main() {
   const contracts = getContracts(network.name)[network.name];
 
   const Airdrop = await ethers.getContractFactory("Airdrop");
+  await validateDefenderUpgradeApprovalOwnerAddress();
 
   const proposal = await defender.proposeUpgradeWithApproval(contracts.airdrop, Airdrop);
 
