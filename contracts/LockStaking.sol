@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.8.23;
+pragma solidity 0.8.23;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -62,46 +62,88 @@ contract LockStaking is
     }
 
     /* ============ Constants ============== */
-    // Represents the scaling factor used in calculations
+    /**
+     * @dev Represents the scaling factor used in calculations
+     */
     uint256 public constant PRECISION = 1e12;
-    // Represents the category LOCK STAKING in the LOCKON vesting
+    /**
+     * @dev Represents the category LOCK STAKING in the LOCKON vesting
+     */
     uint256 public constant LOCK_STAKING_VESTING_CATEGORY_ID = 0;
 
     /* ============ State Variables ============ */
-    // Address of the validator
+    /**
+     * @dev Address of the validator
+     */
     address public validatorAddress;
-    // Address to receive penalty fee
+    /**
+     * @dev Address to receive penalty fee
+     */
     address public feeReceiver;
-    // Address of LOCKON vesting contract
+    /**
+     * @dev Address of LOCKON vesting contract
+     */
     address public lockonVesting;
-    // Total number of tokens that has been locked into contract
+    /**
+     * @dev Total number of tokens that has been locked into contract
+     */
     uint256 public totalLockedAmount;
-    // Total number of LOCK score
+    /**
+     * @dev Total number of LOCK scoreTotal number of LOCK score
+     */
     uint256 public totalLockScore;
-    // Accumulated reward per score, times 1e12
+    /**
+     * @dev Accumulated reward per score, times 1e12
+     */
     uint256 public rewardPerScore;
-    // Timestamp on which staking process start
+    /**
+     * @dev Timestamp on which staking process start
+     */
     uint256 public startTimestamp;
-    // Timestamp on which LOCK token is released
+    /**
+     * @dev Timestamp on which LOCK token is released
+     */
     uint256 public lockTokenReleasedTimestamp;
-    // Last block timestamp that reward distribution occurs
+    /**
+     * @dev Last block timestamp that reward distribution occurs
+     */
     uint256 public lastRewardTimestamp;
-    // Current amount of reward used to pay for user staking's reward
+    /**
+     * @dev Current amount of reward used to pay for user staking's reward
+     */
     uint256 public currentRewardAmount;
-    // Divider for the basic rate
+    /**
+     * @dev Divider for the basic rate
+     */
     uint256 public basicRateDivider;
-    // Bonus rate per second combine with current reward amount to get back reward token per second
+    /**
+     * @dev Bonus rate per second combine with current reward amount to get back reward token per second
+     */
     uint256 public bonusRatePerSecond;
-    // Track the status of each requestId
+    /**
+     * @dev Track the status of each requestId
+     */
     mapping(string => bool) public isRequestIdProcessed;
-    // Mapping of user wallet address to UserInfo struct, which stores user staking information
+    /**
+     * @dev Mapping of user wallet address to UserInfo struct, which stores user staking information
+     */
     mapping(address => UserInfo) public userInfo;
-    // Interface of the LOCK token contract
+    /**
+     * @dev Interface of the LOCK token contract
+     */
     IERC20 public lockToken;
-    // Minimum lock duration
+    /**
+     * @dev Minimum lock duration
+     */
     uint256 public minimumLockDuration;
-    // Penalty rate for early withdrawal
+    /**
+     * @dev Penalty rate for early withdrawal
+     */
     uint256 public penaltyRate;
+    /**
+     * @dev Reserved storage space to allow for layout changes in the future.
+     */
+    uint256[50] private __gap;
 
     /* ============ Events ============ */
 
@@ -191,22 +233,25 @@ contract LockStaking is
     /**
      * Emitted when the LOCKON Vesting address is updated
      *
+     * @param sender Address of the function executor
      * @param lockonVesting New LOCKON Vesting address
      * @param timestamp Timestamp at which the address is updated
      */
-    event LockonVestingUpdated(address lockonVesting, uint256 timestamp);
+    event LockonVestingUpdated(address indexed sender, address lockonVesting, uint256 timestamp);
 
     /**
      * Emitted when the fee receiver is updated
      *
+     * @param sender Address of the function executor
      * @param feeReceiver New fee receiver address
      * @param timestamp Timestamp at which the address is updated
      */
-    event FeeReceiverUpdated(address feeReceiver, uint256 timestamp);
+    event FeeReceiverUpdated(address indexed sender, address feeReceiver, uint256 timestamp);
 
     /**
      * Emitted when the basic rate divider is updated
      *
+     * @param sender Address of the function executor
      * @param basicRateDivider New Value for basic rate divider
      * @param currentRewardAmount New value for current reward amount
      * @param rewardPerScore New value for reward per score
@@ -214,6 +259,7 @@ contract LockStaking is
      * @param timestamp Timestamp at which the address is updated
      */
     event BasicRateDividerUpdated(
+        address indexed sender,
         uint256 basicRateDivider,
         uint256 currentRewardAmount,
         uint256 rewardPerScore,
@@ -224,6 +270,7 @@ contract LockStaking is
     /**
      * Emitted when the bonus rate per second is updated
      *
+     * @param sender Address of the function executor
      * @param bonusRatePerSecond New value for bonus rate per second
      * @param currentRewardAmount New value for current reward amount
      * @param rewardPerScore New value for reward per score
@@ -231,6 +278,7 @@ contract LockStaking is
      * @param timestamp Timestamp at which the address is updated
      */
     event BonusRatePerSecondUpdated(
+        address indexed sender,
         uint256 bonusRatePerSecond,
         uint256 currentRewardAmount,
         uint256 rewardPerScore,
@@ -241,26 +289,29 @@ contract LockStaking is
     /**
      * Emitted when the minimum lock duration is updated
      *
+     * @param sender Address of the function executor
      * @param minimumLockDuration New value for minimum lock duration
      * @param timestamp Timestamp at which the address is updated
      */
-    event MinimumLockDurationUpdated(uint256 minimumLockDuration, uint256 timestamp);
+    event MinimumLockDurationUpdated(address indexed sender, uint256 minimumLockDuration, uint256 timestamp);
 
     /**
      * Emitted when the penalty rate is updated
      *
+     * @param sender Address of the function executor
      * @param penaltyRate New value for penalty rate
      * @param timestamp Timestamp at which the address is updated
      */
-    event PenaltyRateUpdated(uint256 penaltyRate, uint256 timestamp);
+    event PenaltyRateUpdated(address indexed sender, uint256 penaltyRate, uint256 timestamp);
 
     /**
      * Emitted when the validator address is updated
      *
+     * @param sender Address of the function executor
      * @param validator New Validator address
      * @param timestamp Timestamp at which the address is updated
      */
-    event ValidatorAddressUpdated(address validator, uint256 timestamp);
+    event ValidatorAddressUpdated(address indexed sender, address validator, uint256 timestamp);
 
     /**
      * Emitted when a user cancels a staking reward claim order
@@ -273,18 +324,23 @@ contract LockStaking is
     /**
      * Emitted when the admin allocates an amount of LOCK tokens to the contract
      *
-     * @param owner Address of the owner to allocate LOCK tokens
+     * @param sender Address of the function executor
      * @param amount Amount of LOCK tokens that are allocated
      */
-    event LockTokenAllocated(address owner, uint256 amount);
+    event LockTokenAllocated(address indexed sender, uint256 amount);
 
     /**
      * Emitted when the admin withdraw an amount of LOCK tokens from the contract
      *
-     * @param owner Address of the owner to withdraw LOCK tokens
+     * @param sender Address of the function executor
      * @param amount Amount of LOCK tokens that are deallocated
      */
-    event LockTokenDeallocated(address owner, uint256 amount);
+    event LockTokenDeallocated(address indexed sender, uint256 amount);
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
 
     /**
      * Initializes the LOCK Staking contract
@@ -309,7 +365,7 @@ contract LockStaking is
         uint256 _currentRewardAmount,
         uint256 _basicRateDivider,
         uint256 _bonusRatePerSecond
-    ) public initializer {
+    ) external initializer {
         require(_bonusRatePerSecond != 0, "LOCK Staking: Bonus rate per second must be greater than 0");
         // Initialize the contract and set the owner
         // This function should be called only once during deployment
@@ -336,9 +392,6 @@ contract LockStaking is
         penaltyRate = 300_000_000_000;
         minimumLockDuration = 100 days;
     }
-
-    // Function to receive Ether. msg.data must be empty
-    receive() external payable {}
 
     /* ============ View Functions ============ */
 
@@ -698,7 +751,7 @@ contract LockStaking is
     function setLockonVesting(address _lockonVesting) external onlyOwner {
         require(_lockonVesting != address(0), "LOCK Staking: Zero address not allowed");
         lockonVesting = _lockonVesting;
-        emit LockonVestingUpdated(lockonVesting, block.timestamp);
+        emit LockonVestingUpdated(msg.sender, lockonVesting, block.timestamp);
     }
 
     /**
@@ -708,7 +761,7 @@ contract LockStaking is
     function setValidatorAddress(address _validatorAddress) external onlyOwner {
         require(_validatorAddress != address(0), "LOCK Staking: Zero address not allowed");
         validatorAddress = _validatorAddress;
-        emit ValidatorAddressUpdated(validatorAddress, block.timestamp);
+        emit ValidatorAddressUpdated(msg.sender, validatorAddress, block.timestamp);
     }
 
     /**
@@ -718,7 +771,7 @@ contract LockStaking is
     function setFeeReceiver(address _feeReceiver) external onlyOwner {
         require(_feeReceiver != address(0), "LOCK Staking: Zero address not allowed");
         feeReceiver = _feeReceiver;
-        emit FeeReceiverUpdated(feeReceiver, block.timestamp);
+        emit FeeReceiverUpdated(msg.sender, feeReceiver, block.timestamp);
     }
 
     /**
@@ -730,7 +783,7 @@ contract LockStaking is
         updatePool();
         basicRateDivider = _basicRateDivider;
         emit BasicRateDividerUpdated(
-            basicRateDivider, currentRewardAmount, rewardPerScore, lastRewardTimestamp, block.timestamp
+            msg.sender, basicRateDivider, currentRewardAmount, rewardPerScore, lastRewardTimestamp, block.timestamp
         );
     }
 
@@ -744,7 +797,7 @@ contract LockStaking is
         updatePool();
         bonusRatePerSecond = _bonusRatePerSecond;
         emit BonusRatePerSecondUpdated(
-            bonusRatePerSecond, currentRewardAmount, rewardPerScore, lastRewardTimestamp, block.timestamp
+            msg.sender, bonusRatePerSecond, currentRewardAmount, rewardPerScore, lastRewardTimestamp, block.timestamp
         );
     }
 
@@ -755,7 +808,7 @@ contract LockStaking is
      */
     function setMinimumLockDuration(uint256 _minimumLockDuration) external onlyOwner {
         minimumLockDuration = _minimumLockDuration;
-        emit MinimumLockDurationUpdated(minimumLockDuration, block.timestamp);
+        emit MinimumLockDurationUpdated(msg.sender, minimumLockDuration, block.timestamp);
     }
 
     /**
@@ -765,7 +818,7 @@ contract LockStaking is
      */
     function setPenaltyRate(uint256 _penaltyRate) external onlyOwner {
         penaltyRate = _penaltyRate;
-        emit PenaltyRateUpdated(penaltyRate, block.timestamp);
+        emit PenaltyRateUpdated(msg.sender, penaltyRate, block.timestamp);
     }
 
     /**
@@ -796,7 +849,7 @@ contract LockStaking is
      * @param now_ The current block timestamp
      */
     function _calculateLockTimestamp(uint256 currentLockEnd, uint256 newDuration, uint256 now_)
-        internal
+        private
         pure
         returns (uint256, uint256)
     {
@@ -827,7 +880,10 @@ contract LockStaking is
         return signer;
     }
 
-    function getDomainSeparator() public view returns (bytes32) {
+    /**
+     * @dev Return domain separator for LOCK Staking
+     */
+    function getDomainSeparator() external view returns (bytes32) {
         return _domainSeparatorV4();
     }
 
@@ -838,7 +894,7 @@ contract LockStaking is
      * @param _signature The signature to validate the claim request
      */
     function _verifyClaimRequest(ClaimRequest memory _claimRequest, bytes memory _signature)
-        internal
+        private
         view
         returns (address)
     {

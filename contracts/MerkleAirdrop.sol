@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.8.23;
+pragma solidity 0.8.23;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -15,7 +15,6 @@ import "./interfaces/ILockonVesting.sol";
  * @title MerkleAirdrop contract
  * @author LOCKON
  * @dev Allows users to distribute LOCK Token for airdrop and claim rewards
- *
  */
 contract MerkleAirdrop is
     Initializable,
@@ -27,20 +26,36 @@ contract MerkleAirdrop is
     using SafeERC20 for IERC20;
 
     /* ============ Constants ============== */
-    // Represents the category AIRDROP in the LOCKON vesting
+    /**
+     * @dev Represents the category AIRDROP in the LOCKON vesting
+     */
     uint256 public constant AIRDROP_VESTING_CATEGORY_ID = 2;
 
     /* ============ State Variables ============ */
-    // The merkle root hashed from all user airdrop information
+    /**
+     * @dev The merkle root hashed from all user airdrop information
+     */
     bytes32 public merkleRoot;
-    // Address of LOCKON vesting contract
+    /**
+     * @dev Address of LOCKON vesting contract
+     */
     address public lockonVesting;
-    // Timestamp on which airdrop process start
+    /**
+     * @dev Timestamp on which airdrop process start
+     */
     uint256 public startTimestamp;
-    // Mapping of user address to airdrop LOCK token reward amount
+    /**
+     * @dev Mapping of user address to airdrop LOCK token reward amount
+     */
     mapping(address => bool) public hasClaimed;
-    // Interface of the LOCK token contract
+    /**
+     * @dev Interface of the LOCK token contract
+     */
     IERC20 public lockToken;
+    /**
+     * @dev Reserved storage space to allow for layout changes in the future.
+     */
+    uint256[50] private __gap;
 
     /* ============ Events ============ */
     /**
@@ -54,42 +69,50 @@ contract MerkleAirdrop is
     /**
      * Emitted when the LOCKON Vesting address is updated
      *
+     * @param sender Address of the function executor
      * @param lockonVesting New LOCKON Vesting address
      * @param timestamp Timestamp at which the address is updated
      */
-    event LockonVestingUpdated(address lockonVesting, uint256 timestamp);
+    event LockonVestingUpdated(address indexed sender, address lockonVesting, uint256 timestamp);
 
     /**
      * Emitted when the merkle root is updated
      *
+     * @param sender Address of the function executor
      * @param merkleRoot New merkle root
      * @param timestamp Timestamp at which the hash is updated
      */
-    event MerkleRootUpdated(bytes32 merkleRoot, uint256 timestamp);
+    event MerkleRootUpdated(address indexed sender, bytes32 merkleRoot, uint256 timestamp);
 
     /**
      * Emitted when the start timestamp is updated
      *
+     * @param sender Address of the function executor
      * @param startTimestamp New start timestamp
      * @param timestamp Timestamp at which the airdrop start is updated
      */
-    event StartTimestampUpdated(uint256 startTimestamp, uint256 timestamp);
+    event StartTimestampUpdated(address indexed sender, uint256 startTimestamp, uint256 timestamp);
 
     /**
      * Emitted when the admin allocates an amount of LOCK tokens to the contract
      *
-     * @param owner Address of the owner to allocate LOCK tokens
+     * @param sender Address of the function executor
      * @param amount Amount of LOCK tokens that are allocated
      */
-    event LockTokenAllocated(address owner, uint256 amount);
+    event LockTokenAllocated(address indexed sender, uint256 amount);
 
     /**
      * Emitted when the admin withdraw an amount of LOCK tokens from the contract
      *
-     * @param owner Address of the owner to withdraw LOCK tokens
+     * @param sender Address of the function executor
      * @param amount Amount of LOCK tokens that are deallocated
      */
-    event LockTokenDeallocated(address owner, uint256 amount);
+    event LockTokenDeallocated(address indexed sender, uint256 amount);
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
 
     /**
      * Initializes the Airdrop contract
@@ -106,11 +129,7 @@ contract MerkleAirdrop is
         address _lockToken,
         bytes32 _merkleRoot,
         uint256 _startTimestamp
-    )
-        // uint256 _currentAirdropAmount
-        public
-        initializer
-    {
+    ) external initializer {
         // Initialize the contract and set the owner
         // This function should be called only once during deployment
         __Ownable_init_unchained(_owner);
@@ -123,9 +142,6 @@ contract MerkleAirdrop is
         // Set staking start timestamp
         startTimestamp = _startTimestamp;
     }
-
-    // Function to receive Ether. msg.data must be empty
-    receive() external payable {}
 
     /* ============ External Functions ============ */
 
@@ -192,7 +208,7 @@ contract MerkleAirdrop is
     function setLockonVesting(address _lockonVesting) external onlyOwner {
         require(_lockonVesting != address(0), "Airdrop: Zero address not allowed");
         lockonVesting = _lockonVesting;
-        emit LockonVestingUpdated(lockonVesting, block.timestamp);
+        emit LockonVestingUpdated(msg.sender, lockonVesting, block.timestamp);
     }
 
     /**
@@ -202,7 +218,7 @@ contract MerkleAirdrop is
      */
     function setMerkleRoot(bytes32 _merkleRoot) external onlyOwner {
         merkleRoot = _merkleRoot;
-        emit MerkleRootUpdated(merkleRoot, block.timestamp);
+        emit MerkleRootUpdated(msg.sender, merkleRoot, block.timestamp);
     }
 
     /**
@@ -212,7 +228,7 @@ contract MerkleAirdrop is
      */
     function setStartTimestamp(uint256 _startTimestamp) external onlyOwner {
         startTimestamp = _startTimestamp;
-        emit StartTimestampUpdated(startTimestamp, block.timestamp);
+        emit StartTimestampUpdated(msg.sender, startTimestamp, block.timestamp);
     }
 
     /**

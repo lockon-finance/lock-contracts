@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.8.23;
+pragma solidity 0.8.23;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -26,26 +26,48 @@ contract Airdrop is
     using SafeERC20 for IERC20;
 
     /* ============ Constants ============== */
-    // Represents the category AIRDROP in the LOCKON vesting
+    /**
+     * @dev Represents the category AIRDROP in the LOCKON vesting
+     */
     uint256 public constant AIRDROP_VESTING_CATEGORY_ID = 2;
 
     /* ============ State Variables ============ */
-    // Address of LOCKON vesting contract
+    /**
+     * @dev Address of LOCKON vesting contract
+     */
     address public lockonVesting;
-    // Total airdrop amount of LOCK Tokens user can claim
+    /**
+     * @dev Total airdrop amount of LOCK Tokens user can claim
+     */
     uint256 public totalPendingAirdropAmount;
-    // Timestamp on which airdrop process start
+    /**
+     * @dev Timestamp on which airdrop process start
+     */
     uint256 public startTimestamp;
-    // Mapping of user address to amount of airdrop LOCK token reward
+    /**
+     * @dev Mapping of user address to amount of airdrop LOCK token reward
+     */
     mapping(address => uint256) public userPendingReward;
-    // Mapping that keeps track of whether each address is allowed to receive to distribute to Airdrop contract
+    /**
+     * @dev Mapping that keeps track of whether each address is allowed to receive to distribute to Airdrop contract
+     */
     mapping(address => bool) public isAllowedDistribute;
-    // List address allowed to receive to distribute to Airdrop contract
+    /**
+     * @dev List address allowed to receive to distribute to Airdrop contract
+     */
     address[] public listAllowedDistribute;
-    // Mapping that keeps track each user address index in the list allowed distribute address
+    /**
+     * @dev Mapping that keeps track each user address index in the list allowed distribute address
+     */
     mapping(address => uint256) private allowedDistributeOneBasedIndexes;
-    // Interface of the LOCK token contract
+    /**
+     * @dev Interface of the LOCK token contract
+     */
     IERC20 public lockToken;
+    /**
+     * @dev Reserved storage space to allow for layout changes in the future.
+     */
+    uint256[50] private __gap;
 
     /* ============ Events ============ */
 
@@ -69,51 +91,48 @@ contract Airdrop is
     /**
      * Emitted when the LOCKON Vesting address is updated
      *
+     * @param sender Address of the function executor
      * @param lockonVesting New LOCKON Vesting address
      * @param timestamp Timestamp at which the address is updated
      */
-    event LockonVestingUpdated(address lockonVesting, uint256 timestamp);
-
-    /**
-     * Emitted when the total airdrop amount is updated
-     *
-     * @param currentAirdropAmount New current total airdrop amount
-     * @param timestamp Timestamp at which the amount is updated
-     */
-    event CurrentAirdropAmountUpdated(uint256 currentAirdropAmount, uint256 timestamp);
+    event LockonVestingUpdated(address indexed sender, address lockonVesting, uint256 timestamp);
 
     /**
      * Emitted when the start timestamp is updated
      *
+     * @param sender Address of the function executor
      * @param startTimestamp New start timestamp
      * @param timestamp Timestamp at which the airdrop start is updated
      */
-    event StartTimestampUpdated(uint256 startTimestamp, uint256 timestamp);
+    event StartTimestampUpdated(address indexed sender, uint256 startTimestamp, uint256 timestamp);
 
     /**
      * Emitted when the admin allocates an amount of LOCK tokens to the contract
      *
-     * @param owner Address of the owner to allocate LOCK tokens
+     * @param sender Address of the function executor
      * @param amount Amount of LOCK tokens that are allocated
      */
-    event LockTokenAllocated(address owner, uint256 amount);
+    event LockTokenAllocated(address indexed sender, uint256 amount);
 
     /**
      * Emitted when the admin withdraw an amount of LOCK tokens from the contract
      *
-     * @param owner Address of the owner to withdraw LOCK tokens
+     * @param sender Address of the function executor
      * @param amount Amount of LOCK tokens that are deallocated
      */
-    event LockTokenDeallocated(address owner, uint256 amount);
+    event LockTokenDeallocated(address indexed sender, uint256 amount);
 
     /**
      * Emitted when an address is added or removed from list allowed distribute address
      *
+     * @param sender Address of the function executor
      * @param permissionedAddress address to be added or removed from list
      * @param distributePermission status for checking if address can distribute reward in Airdrop contract
      * @param timestamp Timestamp at which the address is added or removed
      */
-    event DistributePermissionStatusUpdated(address permissionedAddress, bool distributePermission, uint256 timestamp);
+    event DistributePermissionStatusUpdated(
+        address indexed sender, address permissionedAddress, bool distributePermission, uint256 timestamp
+    );
 
     /**
      * @dev Modifier that only owner and address that allowed to distribute can call certain functions
@@ -121,6 +140,11 @@ contract Airdrop is
     modifier onlyDistributeGrantedOrOwner() {
         require(isAllowedDistribute[msg.sender] || msg.sender == owner(), "Airdrop: Forbidden");
         _;
+    }
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
     }
 
     /**
@@ -132,7 +156,7 @@ contract Airdrop is
      * @param _startTimestamp Timestamp on which airdrop process start
      */
     function initialize(address _owner, address _lockonVesting, address _lockToken, uint256 _startTimestamp)
-        public
+        external
         initializer
     {
         // Initialize the contract and set the owner
@@ -146,9 +170,6 @@ contract Airdrop is
         // Set staking start timestamp
         startTimestamp = _startTimestamp;
     }
-
-    // Function to receive Ether. msg.data must be empty
-    receive() external payable {}
 
     /* ============ External Functions ============ */
 
@@ -169,10 +190,8 @@ contract Airdrop is
         );
         uint256 totalAmount;
         for (uint256 i; i < listUserLen;) {
-            require(
-                _listUserAddress[i] != address(0) && _amounts[i] != 0,
-                "Airdrop: Zero address or zero amount is not allowed"
-            );
+            require(_listUserAddress[i] != address(0), "Airdrop: Zero address is not allowed");
+            require(_amounts[i] != 0, "Airdrop: Zero amount is not allowed");
             userPendingReward[_listUserAddress[i]] += _amounts[i];
             totalAmount += _amounts[i];
             unchecked {
@@ -213,7 +232,7 @@ contract Airdrop is
         allowedDistributeOneBasedIndexes[_permissionedAddress] = listAllowedDistribute.length;
         isAllowedDistribute[_permissionedAddress] = true;
         emit DistributePermissionStatusUpdated(
-            _permissionedAddress, isAllowedDistribute[_permissionedAddress], block.timestamp
+            msg.sender, _permissionedAddress, isAllowedDistribute[_permissionedAddress], block.timestamp
         );
     }
 
@@ -237,7 +256,7 @@ contract Airdrop is
         listAllowedDistribute.pop();
         isAllowedDistribute[_permissionedAddress] = false;
         emit DistributePermissionStatusUpdated(
-            _permissionedAddress, isAllowedDistribute[_permissionedAddress], block.timestamp
+            msg.sender, _permissionedAddress, isAllowedDistribute[_permissionedAddress], block.timestamp
         );
     }
 
@@ -293,7 +312,7 @@ contract Airdrop is
     function setLockonVesting(address _lockonVesting) external onlyOwner {
         require(_lockonVesting != address(0), "Airdrop: Zero address not allowed");
         lockonVesting = _lockonVesting;
-        emit LockonVestingUpdated(lockonVesting, block.timestamp);
+        emit LockonVestingUpdated(msg.sender, lockonVesting, block.timestamp);
     }
 
     /**
@@ -303,7 +322,7 @@ contract Airdrop is
      */
     function setStartTimestamp(uint256 _startTimestamp) external onlyOwner {
         startTimestamp = _startTimestamp;
-        emit StartTimestampUpdated(startTimestamp, block.timestamp);
+        emit StartTimestampUpdated(msg.sender, startTimestamp, block.timestamp);
     }
 
     /**

@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.8.23;
+pragma solidity 0.8.23;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -45,29 +45,50 @@ contract LockonVesting is
     }
 
     /* ============ State Variables ============ */
+
     /**
-     * Mapping of vesting category id to its vesting schedule
+     * @dev Mapping of vesting category id to its vesting schedule
      *
      * Ex: category id 0 represents category LOCK STAKING, has a vesting schedule of 100 days
      * => categoryId[0] = 100 days;
      */
     mapping(uint256 => uint256) public vestingCategories;
-    // Mapping of user address to VestingWallet struct based on vesting category id, which stores vesting information
+    /**
+     * @dev Mapping of user address to VestingWallet struct based on vesting category id, which stores vesting information
+     */
     mapping(address => mapping(uint256 => VestingWallet)) public userVestingWallet;
-    // Mapping that keeps track of whether each address is allowed to deposit to LOCKON Vesting contract
+    /**
+     * @dev Mapping that keeps track of whether each address is allowed to deposit to LOCKON Vesting contract
+     */
     mapping(address => bool) public isAllowedDeposit;
-    // Mapping that keeps track of whether each address is banned from all activities in LOCKON Vesting
+    /**
+     * @dev Mapping that keeps track of whether each address is banned from all activities in LOCKON Vesting
+     */
     mapping(address => bool) public isBlacklistUser;
-    // List address allowed to receive to deposit to LOCKON Vesting contract
+    /**
+     * @dev List address allowed to receive to deposit to LOCKON Vesting contract
+     */
     address[] public listAllowedDeposit;
-    // Mapping that keeps track each user address index in the list allowed deposit address
+    /**
+     * @dev Mapping that keeps track each user address index in the list allowed deposit address
+     */
     mapping(address => uint256) private allowedDepositOneBasedIndexes;
-    // List address banned from any activities in LOCKON Vesting, only owner can see this
+    /**
+     * @dev List address banned from any activities in LOCKON Vesting, only owner can see this
+     */
     address[] private blacklist;
-    // Mapping that keeps track each user address index in the blacklist
+    /**
+     * @dev Mapping that keeps track each user address index in the blacklist
+     */
     mapping(address => uint256) private blacklistOneBasedIndexes;
-    // Interface of the LOCK token contract
+    /**
+     * @dev Interface of the LOCK token contract
+     */
     IERC20 public lockToken;
+    /**
+     * @dev Reserved storage space to allow for layout changes in the future.
+     */
+    uint256[50] private __gap;
 
     /* ============ Events ============ */
 
@@ -102,29 +123,34 @@ contract LockonVesting is
     /**
      * Emitted when an address is added or removed from list allowed deposit address
      *
-     * @param addr address
+     * @param sender Address of the function executor
+     * @param userAddress address to be updated deposit permission
      * @param depositPermission status for checking if address can deposit to LOCKON Vesting
      * @param timestamp Timestamp at which the address is added or removed
      */
-    event DepositPermissionStatusUpdated(address addr, bool depositPermission, uint256 timestamp);
+    event DepositPermissionStatusUpdated(
+        address indexed sender, address userAddress, bool depositPermission, uint256 timestamp
+    );
 
     /**
      * Emitted when an address is banned from activities
      *
-     * @param addr address
+     * @param sender Address of the function executor
+     * @param userAddress address to be added to blacklist
      * @param isBanned status for checking if address is banned
      * @param timestamp Timestamp at which the address is banned
      */
-    event UserBlacklistUserAdded(address addr, bool isBanned, uint256 timestamp);
+    event UserBlacklistUserAdded(address indexed sender, address userAddress, bool isBanned, uint256 timestamp);
 
     /**
      * Emitted when an address is unbanned from activities
      *
-     * @param addr address
+     * @param sender Address of the function executor
+     * @param userAddress address to be removed from blacklist
      * @param isBanned status for checking if address is banned
      * @param timestamp Timestamp at which the address is unbanned
      */
-    event UserBlacklistUserRemoved(address addr, bool isBanned, uint256 timestamp);
+    event UserBlacklistUserRemoved(address indexed sender, address userAddress, bool isBanned, uint256 timestamp);
 
     /**
      * @dev Modifier that only owner and address that allowed to deposit can call certain functions
@@ -134,13 +160,18 @@ contract LockonVesting is
         _;
     }
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
     /**
      * Initializes the vesting contract
      *
      * @param _owner      Address of the owner of this contract
      * @param _lockToken  Address of the ERC20 LOCK Token
      */
-    function initialize(address _owner, address _lockToken) public initializer {
+    function initialize(address _owner, address _lockToken) external initializer {
         // Initialize Ownable lib and set the owner
         __Ownable_init_unchained(_owner);
         __UUPSUpgradeable_init();
@@ -152,16 +183,13 @@ contract LockonVesting is
         vestingCategories[2] = 300 days; // index 2 represents category AIRDROP
     }
 
-    // Function to receive Ether. msg.data must be empty
-    receive() external payable {}
-
     /**
      * @dev This view function returns a specific timestamp at which vesting process end.
      *
      * @param user Address of the user initiates the vesting
      * @param categoryId A category id associated with the vesting schedule
      */
-    function getVestingEndTime(address user, uint256 categoryId) public view returns (uint256) {
+    function getVestingEndTime(address user, uint256 categoryId) external view returns (uint256) {
         return userVestingWallet[user][categoryId].startTime + vestingCategories[categoryId];
     }
 
@@ -195,7 +223,7 @@ contract LockonVesting is
      * @param categoryId A category id associated with the vesting schedule
      * @return The cumulative amount of LOCK tokens vested in the current schedule
      */
-    function _claimable(address user, uint256 categoryId) internal view returns (uint256) {
+    function _claimable(address user, uint256 categoryId) private view returns (uint256) {
         VestingWallet storage vestingInfo = userVestingWallet[user][categoryId];
         if (vestingInfo.vestingAmount == 0) {
             return 0;
@@ -290,7 +318,7 @@ contract LockonVesting is
         allowedDepositOneBasedIndexes[_permissionedAddress] = listAllowedDeposit.length;
         isAllowedDeposit[_permissionedAddress] = true;
         emit DepositPermissionStatusUpdated(
-            _permissionedAddress, isAllowedDeposit[_permissionedAddress], block.timestamp
+            msg.sender, _permissionedAddress, isAllowedDeposit[_permissionedAddress], block.timestamp
         );
     }
 
@@ -314,7 +342,7 @@ contract LockonVesting is
         listAllowedDeposit.pop();
         isAllowedDeposit[_permissionedAddress] = false;
         emit DepositPermissionStatusUpdated(
-            _permissionedAddress, isAllowedDeposit[_permissionedAddress], block.timestamp
+            msg.sender, _permissionedAddress, isAllowedDeposit[_permissionedAddress], block.timestamp
         );
     }
 
@@ -358,7 +386,7 @@ contract LockonVesting is
         blacklist.push(_userAddress);
         blacklistOneBasedIndexes[_userAddress] = blacklist.length;
         isBlacklistUser[_userAddress] = true;
-        emit UserBlacklistUserAdded(_userAddress, isBlacklistUser[_userAddress], block.timestamp);
+        emit UserBlacklistUserAdded(msg.sender, _userAddress, isBlacklistUser[_userAddress], block.timestamp);
     }
 
     /**
@@ -377,7 +405,7 @@ contract LockonVesting is
         delete blacklistOneBasedIndexes[_userAddress];
         blacklist.pop();
         isBlacklistUser[_userAddress] = false;
-        emit UserBlacklistUserRemoved(_userAddress, isBlacklistUser[_userAddress], block.timestamp);
+        emit UserBlacklistUserRemoved(msg.sender, _userAddress, isBlacklistUser[_userAddress], block.timestamp);
     }
 
     /**

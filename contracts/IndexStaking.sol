@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.8.23;
+pragma solidity 0.8.23;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -12,6 +12,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "./interfaces/ILockonVesting.sol";
+
 /**
  * @title Index Staking contract
  * @author LOCKON
@@ -19,7 +20,6 @@ import "./interfaces/ILockonVesting.sol";
  * The contract is designed to facilitate the staking of various ERC-20 tokens
  *
  */
-
 contract IndexStaking is
     Initializable,
     OwnableUpgradeable,
@@ -30,10 +30,14 @@ contract IndexStaking is
 {
     using SafeERC20 for IERC20;
     /* ============ Constants ============== */
-    // Represents the scaling factor used in calculations
 
+    /**
+     * @dev Represents the scaling factor used in calculations
+     */
     uint256 public constant PRECISION = 1e12;
-    // Represents the category INDEX STAKING in the LOCKON vesting
+    /**
+     * @dev Represents the category INDEX STAKING in the LOCKON vesting
+     */
     uint256 public constant INDEX_STAKING_VESTING_CATEGORY_ID = 1;
 
     /* ============ Struct ============ */
@@ -72,36 +76,58 @@ contract IndexStaking is
     }
 
     /* ============ Mappings ============ */
-
-    // Mark the order as cancelled
-    mapping(string => bool) public isStakingClaimed;
+    /**
+     * @dev Mapping that keeps track of whether each address is allowed to update current reward amount
+     */
+    mapping(address => bool) public isAllowedUpdate;
+    /**
+     * @dev Mapping that keeps track each user address index in the list allowed update address
+     */
+    mapping(address => uint256) private allowedUpdateOneBasedIndexes;
+    /**
+     * @dev A mapping to track PoolInfo struct for each stake token address
+     */
+    mapping(address => PoolInfo) public tokenPoolInfo;
+    /**
+     * @dev A mapping to track UserInfo for each user in each pool
+     */
+    mapping(address => mapping(address => UserInfo)) public userInfo;
+    /**
+     * @dev Track the status of each requestId
+     */
+    mapping(string => bool) public isRequestIdProcessed;
 
     /* ============ State Variables ============ */
 
-    // Address of the validator
+    /**
+     * @dev Address of the validator
+     */
     address public validatorAddress;
-    // Mapping that keeps track of whether each address is allowed to update current reward amount
-    mapping(address => bool) public isAllowedUpdate;
-    // List address allowed to update the current reward amount of Index staking contract
+    /**
+     * @dev List address allowed to update the current reward amount of Index staking contract
+     */
     address[] public listAllowedUpdate;
-    // Mapping that keeps track each user address index in the list allowed update address
-    mapping(address => uint256) private allowedUpdateOneBasedIndexes;
-    // Address of LOCKON vesting contract
+
+    /**
+     * @dev Address of LOCKON vesting contract
+     */
     address public lockonVesting;
-    // LOCK token contract used as index staking reward
+    /**
+     * @dev LOCK token contract used as index staking reward
+     */
     IERC20 public lockToken;
-    // Timestamp of the last reward distribution
-    uint256 public lastRewardDistributionTime;
-    // Current amount of reward used to pay for user staking's reward
+    /**
+     * @dev Current amount of reward used to pay for user staking's reward
+     */
     uint256 public currentRewardAmount;
-    // Current total number of pools in index staking
+    /**
+     * @dev Current total number of pools in index staking
+     */
     uint256 public currentNumOfPools;
-    // A mapping to track PoolInfo struct for each stake token address
-    mapping(address => PoolInfo) public tokenPoolInfo;
-    // A mapping to track UserInfo for each user in each pool
-    mapping(address => mapping(address => UserInfo)) public userInfo;
-    // Track the status of each requestId
-    mapping(string => bool) public isRequestIdProcessed;
+    /**
+     * @dev Reserved storage space to allow for layout changes in the future.
+     */
+    uint256[50] private __gap;
 
     /* ============ Events ============ */
 
@@ -125,12 +151,19 @@ contract IndexStaking is
     /**
      * Emitted when a new staking pool is added
      *
+     * @param sender Address of the function executor
      * @param stakeToken Address of the staked token in the pool
      * @param bonusRatePerSecond Bonus rate per second combine with current reward amount to get back reward token per second
      * @param currentNumOfPools Current total number of pools in index staking
      * @param startTimestamp Timestamp at which the staking pool starts
      */
-    event PoolAdded(address stakeToken, uint256 bonusRatePerSecond, uint256 currentNumOfPools, uint256 startTimestamp);
+    event PoolAdded(
+        address indexed sender,
+        address stakeToken,
+        uint256 bonusRatePerSecond,
+        uint256 currentNumOfPools,
+        uint256 startTimestamp
+    );
 
     /**
      * Emitted when a user successfully deposits tokens into a staking pool
@@ -207,18 +240,20 @@ contract IndexStaking is
     /**
      * Emitted when the LOCKON Vesting address is updated
      *
+     * @param sender Address of the function executor
      * @param lockonVesting New LOCKON Vesting address
      * @param timestamp Timestamp at which the address is updated
      */
-    event LockonVestingAddressUpdated(address lockonVesting, uint256 timestamp);
+    event LockonVestingAddressUpdated(address indexed sender, address lockonVesting, uint256 timestamp);
 
     /**
      * Emitted when the validator address is updated
      *
+     * @param sender Address of the function executor
      * @param validator New Validator address
      * @param timestamp Timestamp at which the address is updated
      */
-    event ValidatorAddressUpdated(address validator, uint256 timestamp);
+    event ValidatorAddressUpdated(address indexed sender, address validator, uint256 timestamp);
 
     /**
      * Emitted when a user set new current reward amount
@@ -232,15 +267,19 @@ contract IndexStaking is
     /**
      * Emitted when a user set new permissioned address
      *
+     * @param sender Address of the function executor
      * @param permissionedAddress New permissioned address
      * @param timestamp Timestamp at which the address is updated
      * @param isPermissionGranted User update permission status
      */
-    event PermissionedAddressUpdated(address permissionedAddress, bool isPermissionGranted, uint256 timestamp);
+    event PermissionedAddressUpdated(
+        address indexed sender, address permissionedAddress, bool isPermissionGranted, uint256 timestamp
+    );
 
     /**
      * Emitted when the bonus rate per second is updated
      *
+     * @param sender Address of the function executor
      * @param stakeToken Token address user stake
      * @param bonusRatePerSecond New value for bonus rate per second
      * @param currentRewardAmount New value for current reward amount
@@ -249,6 +288,7 @@ contract IndexStaking is
      * @param timestamp Timestamp at which the address is updated
      */
     event BonusRatePerSecondUpdated(
+        address indexed sender,
         address stakeToken,
         uint256 bonusRatePerSecond,
         uint256 currentRewardAmount,
@@ -268,18 +308,23 @@ contract IndexStaking is
     /**
      * Emitted when the admin allocates an amount of LOCK tokens to the contract
      *
-     * @param owner Address of the owner to allocate LOCK tokens
+     * @param sender Address of the function executor
      * @param amount Amount of LOCK tokens that are allocated
      */
-    event LockTokenAllocated(address owner, uint256 amount);
+    event LockTokenAllocated(address indexed sender, uint256 amount);
 
     /**
      * Emitted when the admin withdraw an amount of LOCK tokens from the contract
      *
-     * @param owner Address of the owner to withdraw LOCK tokens
+     * @param sender Address of the function executor
      * @param amount Amount of LOCK tokens that are deallocated
      */
-    event LockTokenDeallocated(address owner, uint256 amount);
+    event LockTokenDeallocated(address indexed sender, uint256 amount);
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
 
     /**
      * @dev Initializes the Index Staking contract with default pools
@@ -316,7 +361,7 @@ contract IndexStaking is
         lockToken = IERC20(_lockToken);
 
         uint256 len = pools.length;
-        for (uint256 i = 0; i < len;) {
+        for (uint256 i; i < len;) {
             IERC20 stakeToken = pools[i].stakeToken;
             require(address(stakeToken) != address(0), "Index Staking: Zero address not allowed");
             require(
@@ -330,9 +375,6 @@ contract IndexStaking is
         }
         currentNumOfPools += len;
     }
-
-    // Function to receive Ether. msg.data must be empty
-    receive() external payable {}
 
     /* ============ View Functions ============ */
 
@@ -430,7 +472,7 @@ contract IndexStaking is
         tokenPoolInfo[_stakeToken] =
             PoolInfo(IERC20(_stakeToken), 0, 0, _bonusRatePerSecond, _startTimestamp, _startTimestamp);
         currentNumOfPools += 1;
-        emit PoolAdded(_stakeToken, _bonusRatePerSecond, currentNumOfPools, _startTimestamp);
+        emit PoolAdded(msg.sender, _stakeToken, _bonusRatePerSecond, currentNumOfPools, _startTimestamp);
     }
 
     /**
@@ -540,8 +582,6 @@ contract IndexStaking is
         updatePool(_stakeToken);
         // Mark the requestId as processed to prevent duplicate claim
         isRequestIdProcessed[_requestId] = true;
-        // Mark the timestamp of the latest distribution for tracking
-        lastRewardDistributionTime = block.timestamp;
         user.cumulativePendingReward -= _cumulativePendingReward;
         user.rewardDebt = (user.stakedAmount * pool.rewardPerToken) / PRECISION;
         // Approve for the contract vesting
@@ -612,7 +652,7 @@ contract IndexStaking is
     function setLockonVesting(address _lockonVesting) external onlyOwner {
         require(_lockonVesting != address(0), "Index Staking: Zero address not allowed");
         lockonVesting = _lockonVesting;
-        emit LockonVestingAddressUpdated(lockonVesting, block.timestamp);
+        emit LockonVestingAddressUpdated(msg.sender, lockonVesting, block.timestamp);
     }
 
     /**
@@ -622,7 +662,7 @@ contract IndexStaking is
     function setValidatorAddress(address _validatorAddress) external onlyOwner {
         require(_validatorAddress != address(0), "Index Staking: Zero address not allowed");
         validatorAddress = _validatorAddress;
-        emit ValidatorAddressUpdated(validatorAddress, block.timestamp);
+        emit ValidatorAddressUpdated(msg.sender, validatorAddress, block.timestamp);
     }
 
     /**
@@ -647,7 +687,9 @@ contract IndexStaking is
         listAllowedUpdate.push(_permissionedAddress);
         allowedUpdateOneBasedIndexes[_permissionedAddress] = listAllowedUpdate.length;
         isAllowedUpdate[_permissionedAddress] = true;
-        emit PermissionedAddressUpdated(_permissionedAddress, isAllowedUpdate[_permissionedAddress], block.timestamp);
+        emit PermissionedAddressUpdated(
+            msg.sender, _permissionedAddress, isAllowedUpdate[_permissionedAddress], block.timestamp
+        );
     }
 
     /**
@@ -668,7 +710,9 @@ contract IndexStaking is
         delete allowedUpdateOneBasedIndexes[_permissionedAddress];
         listAllowedUpdate.pop();
         isAllowedUpdate[_permissionedAddress] = false;
-        emit PermissionedAddressUpdated(_permissionedAddress, isAllowedUpdate[_permissionedAddress], block.timestamp);
+        emit PermissionedAddressUpdated(
+            msg.sender, _permissionedAddress, isAllowedUpdate[_permissionedAddress], block.timestamp
+        );
     }
 
     /**
@@ -691,6 +735,7 @@ contract IndexStaking is
         updatePool(_stakeToken);
         pool.bonusRatePerSecond = _bonusRatePerSecond;
         emit BonusRatePerSecondUpdated(
+            msg.sender,
             _stakeToken,
             pool.bonusRatePerSecond,
             currentRewardAmount,
@@ -751,7 +796,10 @@ contract IndexStaking is
         return signer;
     }
 
-    function getDomainSeparator() public view returns (bytes32) {
+    /**
+     * @dev Return domain separator for Index Staking
+     */
+    function getDomainSeparator() external view returns (bytes32) {
         return _domainSeparatorV4();
     }
 
@@ -762,7 +810,7 @@ contract IndexStaking is
      * @param _signature The signature to validate the claim
      */
     function _verifyClaimRequest(ClaimRequest memory _claimRequest, bytes memory _signature)
-        internal
+        private
         view
         returns (address)
     {

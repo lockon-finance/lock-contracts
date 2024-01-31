@@ -1,14 +1,13 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import {getContracts, getEnvParams, saveContract, getDefenderUpgradeApprovalOwnerAddress} from "./utils/deploy-helper";
+import {getContracts, saveContract, getDefenderUpgradeApprovalOwnerAddress} from "./utils/deploy-helper";
 
 async function main() {
-  const envParams = getEnvParams();
   const contracts = getContracts(network.name)[network.name];
   const Airdrop = await ethers.getContractFactory("Airdrop");
   const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
 
-  const startTimestamp = Math.floor(Date.now() / 1000)
+  const startTimestamp = Math.floor(Date.now() / 1000);
   const airdrop = await defender.deployProxy(
     Airdrop,
     [

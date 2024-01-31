@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.8.23;
+pragma solidity 0.8.23;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -15,11 +15,23 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 contract LockToken is Initializable, OwnableUpgradeable, ERC20Upgradeable, UUPSUpgradeable {
     /* ============ Constants ============== */
 
-    // Maximum supply of Lock Token
-
+    /**
+     * @dev Maximum supply of Lock Token
+     */
     uint256 public constant MAX_SUPPLY = 10_000_000_000;
-    // Represents the scaling factor used in calculations
+    /**
+     * @dev Represents the scaling factor used in calculations
+     */
     uint256 public constant BASE_DENOMINATOR = 10_000;
+    /**
+     * @dev Reserved storage space to allow for layout changes in the future.
+     */
+    uint256[50] private __gap;
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
 
     /**
      * Initializes the Lock Token contract and mints tokens to owner and operator.
@@ -30,7 +42,7 @@ contract LockToken is Initializable, OwnableUpgradeable, ERC20Upgradeable, UUPSU
      * @param operatorAddress Address of the operator
      */
     function initialize(string memory name, string memory symbol, address ownerAddress, address operatorAddress)
-        public
+        external
         initializer
     {
         // Initialize the ERC20 token with the provided name and symbol
