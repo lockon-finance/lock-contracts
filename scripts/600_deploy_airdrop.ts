@@ -4,6 +4,10 @@ import {getContracts, saveContract, getDefenderUpgradeApprovalOwnerAddress} from
 
 async function main() {
   const contracts = getContracts(network.name)[network.name];
+  if (contracts.airdrop) {
+    throw new Error("Airdrop contract already deployed");
+  }
+
   const Airdrop = await ethers.getContractFactory("Airdrop");
   const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
 

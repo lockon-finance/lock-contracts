@@ -5,6 +5,10 @@ import {getContracts, getEnvParams, saveContract, getDefenderUpgradeApprovalOwne
 async function main() {
   const envParams = getEnvParams();
   const contracts = getContracts(network.name)[network.name];
+  if (contracts.lockStaking) {
+    throw new Error("LockStaking contract already deployed");
+  }
+
   const LockStaking = await ethers.getContractFactory("LockStaking");
   const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
 

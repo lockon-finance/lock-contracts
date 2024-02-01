@@ -49,7 +49,7 @@ export async function validateDefenderUpgradeApprovalOwnerAddress() {
   await getDefenderUpgradeApprovalOwnerAddress()
 }
 
-export function getContracts(network: any) {
+export function getContracts(network: string) {
   let json: string | Buffer;
   try {
     const env = process.env.NODE_ENV;
@@ -60,16 +60,15 @@ export function getContracts(network: any) {
       )
     );
   } catch (err) {
-    json = "{}";
+    json = `{"${network}":{}}`;
   }
-  const addresses = JSON.parse(String(json));
-  return addresses;
+  return JSON.parse(String(json));
 }
 
 export function saveContract(
-  network: string | number,
-  contract: string | number,
-  address: any
+  network: string,
+  contract: string,
+  address: string
 ) {
   const env = process.env.NODE_ENV;
 

@@ -5,6 +5,10 @@ import {getContracts, getEnvParams, saveContract, getDefenderUpgradeApprovalOwne
 async function main() {
   const envParams = getEnvParams();
   const contracts = getContracts(network.name)[network.name];
+  if (contracts.indexStaking) {
+    throw new Error("IndexStaking contract already deployed");
+  }
+
   const IndexStaking = await ethers.getContractFactory("IndexStaking");
   const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
   const startTimestamp = Math.floor(Date.now() / 1000);

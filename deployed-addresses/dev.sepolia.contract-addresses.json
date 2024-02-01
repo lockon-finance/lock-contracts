@@ -1,8 +1,10 @@
 {
     "sepolia": {
-        "lockToken": "0x8E88C4c0Dee83d71532A3A591473beD7a945cF99",
-        "lockonVesting": "0xd403e7932a2c1e8873084cf2D6D180639232016D",
-        "lockStaking": "0x23db43d2B7Bf3b88E899889f93155B1DE6E1C97B",
-        "indexStaking": "0x4D28CFb1E595bD67bF2e595aEF49087AE8F8680E"
+        "lockToken": "0xebad65486220994e5ba0dD4b13a40c4e27C1235B",
+        "lockonVesting": "0xaCe9eBE23a81110C7cc3608C825A04242a005358",
+        "lockStaking": "0x307cA9Cbd12FB1A797169653B8828A7AF31F9c19",
+        "indexStaking": "0x91244CA51e59E0e64D7527f87b90Ef659B07db4a",
+        "merkleAirdrop": "0x89E08CEFa2275D1631e4ac1F7208c88cA6B08300",
+        "airdrop": "0xB0bcd135a9F37060811E48c15b79487789F3D5F0"
     }
 }

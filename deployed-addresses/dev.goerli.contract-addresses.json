@@ -1,8 +1,0 @@
-{
-    "goerli": {
-        "lockToken": "0xE38728F61BCd3FF5B59252f1FC974AA8eD5055EC",
-        "lockonVesting": "0x22f8c82CD959d14C3993A763a6E7F6cf8DE8729f",
-        "lockStaking": "0x81158bc3dA22E5f5d37622d7C31047d50fF719df",
-        "indexStaking": "0x2007cE1702b14B50571b1c046623bCE0E866C674"
-    }
-}

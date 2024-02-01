@@ -4,6 +4,10 @@ import {getContracts, saveContract, getEnvParams, getDefenderUpgradeApprovalOwne
 
 async function main() {
   const contracts = getContracts(network.name)[network.name];
+  if (contracts.merkleAirdrop) {
+    throw new Error("MerkleAirdrop contract already deployed");
+  }
+
   const envParams = getEnvParams();
   const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
 
