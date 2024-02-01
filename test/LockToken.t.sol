@@ -10,7 +10,7 @@ contract LockTokenTest is Test {
     LockToken public lockToken;
     ERC1967Proxy tokenProxy;
     address public OWNER = address(bytes20(bytes("OWNER")));
-    address public OPERATOR = address(bytes20(bytes("OPERATOR")));
+    address public MANAGEMENT = address(bytes20(bytes("MANAGEMENT")));
     address public ACCOUNT_ONE = address(1);
 
     error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed);
@@ -22,7 +22,7 @@ contract LockTokenTest is Test {
     }
 
     function initializeAndConfig() public {
-        bytes memory tokenData = abi.encodeCall(lockToken.initialize, ("LockToken", "LOCK", OWNER, OPERATOR));
+        bytes memory tokenData = abi.encodeCall(lockToken.initialize, ("LockToken", "LOCK", OWNER, MANAGEMENT));
         tokenProxy = new ERC1967Proxy(address(lockToken), tokenData);
         lockToken = LockToken(address(tokenProxy));
     }
@@ -30,9 +30,9 @@ contract LockTokenTest is Test {
     function test__initilize_and_mint_succeed() public {
         initializeAndConfig();
         uint256 ownerBalance = lockToken.balanceOf(OWNER);
-        uint256 operatorBalance = lockToken.balanceOf(OPERATOR);
-        assertEq(ownerBalance, 6_000_000_000 * 1e18);
-        assertEq(operatorBalance, 4_000_000_000 * 1e18);
+        uint256 managementBalance = lockToken.balanceOf(MANAGEMENT);
+        assertEq(ownerBalance, 4_000_000_000 * 1e18);
+        assertEq(managementBalance, 6_000_000_000 * 1e18);
     }
 
     function test__transfer_tokens_fuzz(uint32 amount) public {
@@ -43,9 +43,9 @@ contract LockTokenTest is Test {
 
     function test__transfer_from_tokens_fuzz(uint32 amount) public {
         initializeAndConfig();
-        lockToken.approve(OPERATOR, amount);
+        lockToken.approve(MANAGEMENT, amount);
         vm.stopPrank();
-        vm.startPrank(OPERATOR);
+        vm.startPrank(MANAGEMENT);
         bool transferPassed = lockToken.transferFrom(OWNER, ACCOUNT_ONE, amount);
         assertTrue(transferPassed);
     }
@@ -54,21 +54,21 @@ contract LockTokenTest is Test {
         initializeAndConfig();
         vm.expectRevert(
             abi.encodeWithSelector(
-                ERC20InsufficientBalance.selector, OWNER, lockToken.balanceOf(OWNER), 6_000_000_001 * 1e18
+                ERC20InsufficientBalance.selector, OWNER, lockToken.balanceOf(OWNER), 4_000_000_001 * 1e18
             )
         );
-        lockToken.transfer(ACCOUNT_ONE, 6_000_000_001 * 1e18);
+        lockToken.transfer(ACCOUNT_ONE, 4_000_000_001 * 1e18);
     }
 
     function test__cannot_transfer_from_if_not_approve() public {
         initializeAndConfig();
         vm.expectRevert(
             abi.encodeWithSelector(
-                ERC20InsufficientAllowance.selector, OPERATOR, lockToken.allowance(OWNER, OPERATOR), 1000 * 1e18
+                ERC20InsufficientAllowance.selector, MANAGEMENT, lockToken.allowance(OWNER, MANAGEMENT), 1000 * 1e18
             )
         );
         vm.stopPrank();
-        vm.startPrank(OPERATOR);
+        vm.startPrank(MANAGEMENT);
         lockToken.transferFrom(msg.sender, ACCOUNT_ONE, 1000 * 1e18);
     }
 }

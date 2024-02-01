@@ -23,6 +23,9 @@ contract LockToken is Initializable, OwnableUpgradeable, ERC20Upgradeable, UUPSU
      * @dev Represents the scaling factor used in calculations
      */
     uint256 public constant BASE_DENOMINATOR = 10_000;
+
+    /* ============ State Variables ============ */
+
     /**
      * @dev Reserved storage space to allow for layout changes in the future.
      */
@@ -34,14 +37,14 @@ contract LockToken is Initializable, OwnableUpgradeable, ERC20Upgradeable, UUPSU
     }
 
     /**
-     * Initializes the Lock Token contract and mints tokens to owner and operator.
+     * Initializes the Lock Token contract and mints tokens to owner and management.
      *
      * @param name            The name of the ERC20 token
      * @param symbol          The symbol of the ERC20 token
      * @param ownerAddress    Address of the owner of this contract
-     * @param operatorAddress Address of the operator
+     * @param managementAddress Address of the management
      */
-    function initialize(string memory name, string memory symbol, address ownerAddress, address operatorAddress)
+    function initialize(string memory name, string memory symbol, address ownerAddress, address managementAddress)
         external
         initializer
     {
@@ -50,14 +53,14 @@ contract LockToken is Initializable, OwnableUpgradeable, ERC20Upgradeable, UUPSU
         // Initialize the contract's owner
         __Ownable_init_unchained(ownerAddress);
         __UUPSUpgradeable_init();
-        // Calculate the amount of tokens to mint to the owner (60% of MAX_SUPPLY)
-        uint256 amountMintToOwner = (MAX_SUPPLY * 6000) / BASE_DENOMINATOR;
-        // Calculate the amount of tokens to mint to the operator (40% of MAX_SUPPLY)
-        uint256 amountMintToOperator = (MAX_SUPPLY * 4000) / BASE_DENOMINATOR;
+        // Calculate the amount of tokens to mint to the owner (40% of MAX_SUPPLY)
+        uint256 amountMintToOwner = (MAX_SUPPLY * 4000) / BASE_DENOMINATOR;
+        // Calculate the amount of tokens to mint to the management (60% of MAX_SUPPLY)
+        uint256 amountMintToManagement = (MAX_SUPPLY * 6000) / BASE_DENOMINATOR;
 
-        // Mint tokens to the owner and operator according to the calculated amounts
+        // Mint tokens to the owner and management according to the calculated amounts
         _mint(ownerAddress, amountMintToOwner * (10 ** uint256(decimals())));
-        _mint(operatorAddress, amountMintToOperator * (10 ** uint256(decimals())));
+        _mint(managementAddress, amountMintToManagement * (10 ** uint256(decimals())));
     }
 
     /**

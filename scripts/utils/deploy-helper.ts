@@ -18,6 +18,7 @@ export function getEnvParams() {
   const lockTokenName = getEnvRequired("LOCK_TOKEN_NAME")
   const lockTokenSymbol = getEnvRequired("LOCK_TOKEN_SYMBOL")
   const operatorAddress = getEnvRequired("OPERATOR_ADDRESS")
+  const managementAddress = getEnvRequired("MANAGEMENT_ADDRESS")
   const feeReceiverAddress = getEnvRequired("FEE_RECEIVER_ADDRESS")
   const merkleRoot = getEnv("MERKLE_ROOT")
   const initialIndexTokenAddresses = getEnvRequired("INITIAL_INDEX_TOKEN_ADDRESSES")
@@ -28,6 +29,7 @@ export function getEnvParams() {
     lockTokenName,
     lockTokenSymbol,
     operatorAddress,
+    managementAddress,
     feeReceiverAddress,
     merkleRoot,
     initialIndexTokenAddresses: initialIndexTokenAddressArray,

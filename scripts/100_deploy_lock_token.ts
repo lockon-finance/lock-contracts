@@ -12,7 +12,7 @@ async function main() {
     envParams.lockTokenName,
     envParams.lockTokenSymbol,
     ownerAddress,
-    envParams.operatorAddress,
+    envParams.managementAddress,
   ], { initializer: "initialize", kind: "uups" });
 
   await lockToken.waitForDeployment();

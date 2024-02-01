@@ -75,7 +75,7 @@ contract IndexStaking is
         uint256 claimAmount; // The amount of reward tokens to be claimed
     }
 
-    /* ============ Mappings ============ */
+    /* ============ State Variables ============ */
     /**
      * @dev Mapping that keeps track of whether each address is allowed to update current reward amount
      */
@@ -96,8 +96,6 @@ contract IndexStaking is
      * @dev Track the status of each requestId
      */
     mapping(string => bool) public isRequestIdProcessed;
-
-    /* ============ State Variables ============ */
 
     /**
      * @dev Address of the validator
