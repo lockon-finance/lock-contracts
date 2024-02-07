@@ -75,17 +75,17 @@ const config: HardhatUserConfig = {
       polygon: polygonApiKey,
     },
   },
-};
-export const gasReporter = {
-  enabled: process.env.REPORT_GAS !== undefined,
-  currency: "USD",
-};
-export const mocha = {
-  timeout: 50000,
-};
-export const contractSizer = {
-  alphaSort: true,
-  runOnCompile: true,
-  disambiguatePaths: false,
+  contractSizer: {
+    alphaSort: true,
+    runOnCompile: true,
+    disambiguatePaths: false,
+  },
+  mocha: {
+    timeout: 50000,
+  },
+  gasReporter: {
+    enabled: process.env.REPORT_GAS !== undefined,
+    currency: "USD",
+  }
 };
 export default config;

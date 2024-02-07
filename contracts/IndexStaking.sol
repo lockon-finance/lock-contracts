@@ -666,9 +666,25 @@ contract IndexStaking is
     /**
      * @dev Update the current reward amount value
      * @param _reductionAmount  The amount by which the current reward amount is reduced
+     * @param _stakeTokens  List of all stake token address
      */
-    function updateCurrentRewardAmount(uint256 _reductionAmount) external onlyAllowedAddressOrOwner {
+    function updateCurrentRewardAmount(uint256 _reductionAmount, address[] calldata _stakeTokens)
+        external
+        onlyAllowedAddressOrOwner
+    {
         require(_reductionAmount != 0, "Index Staking: Reduction amount must be larger than 0");
+        require(
+            _stakeTokens.length == currentNumOfPools,
+            "Index Staking: The list stake token and total number of stake pool must have equal length"
+        );
+        for (uint256 i; i < currentNumOfPools;) {
+            PoolInfo storage poolInfo = tokenPoolInfo[_stakeTokens[i]];
+            require(poolInfo.stakeToken != IERC20(address(0)), "Index Staking: Pool not exist");
+            updatePool(address(poolInfo.stakeToken));
+            unchecked {
+                i++;
+            }
+        }
         currentRewardAmount -= _reductionAmount;
         emit CurrentRewardAmountUpdated(msg.sender, currentRewardAmount, block.timestamp);
     }

@@ -600,31 +600,52 @@ contract IndexStakingTest is Test {
         initializeAndConfig();
         vm.startPrank(OWNER);
         indexStaking.addPermissionedAddress(ACCOUNT_ONE);
+        address[] memory tokenAddresses = new address[](2);
+        tokenAddresses[0] = address(lpiToken);
+        tokenAddresses[1] = address(lbiToken);
+        lbiToken.approve(address(indexStaking), 1 ether);
+        indexStaking.deposit(address(lbiToken), 1 ether);
+        lpiToken.approve(address(indexStaking), 1 ether);
+        indexStaking.deposit(address(lpiToken), 1 ether);
         vm.recordLogs();
-        indexStaking.updateCurrentRewardAmount(10 ether);
+        indexStaking.updateCurrentRewardAmount(10 ether, tokenAddresses);
         assertEq(indexStaking.currentRewardAmount(), 99990 ether);
         vm.stopPrank();
         vm.startPrank(ACCOUNT_ONE);
-        indexStaking.updateCurrentRewardAmount(100 ether);
+        indexStaking.updateCurrentRewardAmount(100 ether, tokenAddresses);
         assertEq(indexStaking.currentRewardAmount(), 99890 ether);
         vm.roll(block.number + 1);
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        assertEq(entries[0].topics[0], keccak256("CurrentRewardAmountUpdated(address,uint256,uint256)"));
-        assertEq(entries[1].topics[0], keccak256("CurrentRewardAmountUpdated(address,uint256,uint256)"));
+        assertEq(entries[0].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
+        assertEq(entries[1].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
+        assertEq(entries[2].topics[0], keccak256("CurrentRewardAmountUpdated(address,uint256,uint256)"));
+        assertEq(entries[3].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
+        assertEq(entries[4].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
+        assertEq(entries[5].topics[0], keccak256("CurrentRewardAmountUpdated(address,uint256,uint256)"));
     }
 
     function test_update_current_reward_amount_fail() public {
         initializeAndConfig();
+        address[] memory tokenAddresses = new address[](2);
+        tokenAddresses[0] = address(lpiToken);
+        tokenAddresses[1] = address(lbiToken);
+        address[] memory stakeTokens = new address[](1);
+        tokenAddresses[0] = address(lpiToken);
         vm.startPrank(ACCOUNT_ONE);
         vm.expectRevert("Index Staking: Forbidden");
-        indexStaking.updateCurrentRewardAmount(919999);
+        indexStaking.updateCurrentRewardAmount(919999, tokenAddresses);
         vm.stopPrank();
         vm.startPrank(OWNER);
         vm.expectRevert("Index Staking: Reduction amount must be larger than 0");
-        indexStaking.updateCurrentRewardAmount(0);
+        indexStaking.updateCurrentRewardAmount(0, tokenAddresses);
+        vm.expectRevert("Index Staking: The list stake token and total number of stake pool must have equal length");
+        indexStaking.updateCurrentRewardAmount(10, stakeTokens);
+        tokenAddresses[0] = address(0);
+        vm.expectRevert("Index Staking: Pool not exist");
+        indexStaking.updateCurrentRewardAmount(110, tokenAddresses);
     }
 
-    function test_set_VALIDATOR_address() public {
+    function test_set_validator_address() public {
         initializeAndConfig();
         vm.prank(OWNER);
         vm.recordLogs();
@@ -635,7 +656,7 @@ contract IndexStakingTest is Test {
         assertEq(entries[0].topics[0], keccak256("ValidatorAddressUpdated(address,address,uint256)"));
     }
 
-    function test_set_VALIDATOR_address_fail() public {
+    function test_set_validator_address_fail() public {
         initializeAndConfig();
         vm.prank(ACCOUNT_ONE);
         vm.expectRevert(abi.encodeWithSelector(OwnableUnauthorizedAccount.selector, ACCOUNT_ONE));
@@ -760,6 +781,51 @@ contract IndexStakingTest is Test {
         (,, rewardPerToken,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lbiToken));
         assertEq(rewardPerToken, 10 days * currentRewardAmount * bonusRatePerSecond / 2 / totalStakedAmount);
         assertEq(lastRewardTimestamp, 10 days + 1);
+    }
+
+    function test__update_set_current_reward_amount_failed_exceed_supply() public {
+        lockonVesting.addAddressDepositPermission(address(indexStaking));
+        IndexStaking.InitPoolInfo memory firstPoolInfo =
+            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.timestamp);
+        IndexStaking.InitPoolInfo memory secondPoolInfo =
+            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300000000, block.timestamp);
+        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
+        poolInfos[0] = firstPoolInfo;
+        poolInfos[1] = secondPoolInfo;
+        bytes memory indexStakingData = abi.encodeCall(
+            indexStaking.initialize,
+            (
+                OWNER,
+                validator,
+                address(lockonVesting),
+                address(lockToken),
+                100000 ether,
+                "INDEX_STAKING",
+                "1",
+                poolInfos
+            )
+        );
+        indexStakingProxy = new ERC1967Proxy(address(indexStaking), indexStakingData);
+        indexStaking = IndexStaking(address(indexStakingProxy));
+        uint256 depositAmount = 10000 ether;
+
+        lbiToken.transfer(address(indexStaking), depositAmount * 2);
+        lbiToken.transfer(ACCOUNT_ONE, depositAmount * 2);
+        lockToken.transfer(address(indexStaking), 10 ether);
+        lockToken.approve(address(indexStaking), depositAmount * 2);
+        vm.stopPrank();
+        vm.startPrank(ACCOUNT_ONE);
+        lbiToken.approve(address(indexStaking), depositAmount * 2);
+        // user first deposit pool lbi
+        indexStaking.deposit(address(lbiToken), depositAmount);
+        skip(900 days);
+        address[] memory tokenAddresses = new address[](2);
+        tokenAddresses[0] = address(lpiToken);
+        tokenAddresses[1] = address(lbiToken);
+        vm.stopPrank();
+        vm.startPrank(OWNER);
+        vm.expectRevert("Index Staking: Stake token reward distributed exceed supply");
+        indexStaking.updateCurrentRewardAmount(10 ether, tokenAddresses);
     }
 
     function test__update_pool_failed() public {

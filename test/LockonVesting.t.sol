@@ -339,7 +339,7 @@ contract LockonVestingTest is Test {
         vestingCategoryValues[0] = 100 days;
         vestingCategoryValues[1] = 200 days;
         vestingCategoryValues[1] = 300 days;
-        vm.expectRevert("The list for category ID and category value must have equal length");
+        vm.expectRevert("LOCKON Vesting: The list for category ID and category value must have equal length");
         lockonVesting.setVestingCategories(vestingCategoryIds, vestingCategoryValues);
     }
 

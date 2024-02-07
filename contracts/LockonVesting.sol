@@ -366,7 +366,7 @@ contract LockonVesting is
         uint256 listIdLen = _vestingCategoryIds.length;
         require(
             _vestingCategoryValues.length == listIdLen,
-            "The list for category ID and category value must have equal length"
+            "LOCKON Vesting: The list for category ID and category value must have equal length"
         );
         for (uint256 i; i < listIdLen;) {
             vestingCategories[_vestingCategoryIds[i]] = _vestingCategoryValues[i];
