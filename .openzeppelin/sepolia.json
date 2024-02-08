@@ -36,6 +36,12 @@
       "txHash": "0xaee8ffaeca0777ea36cca473fec373d7ae0be4aa5acaa0ddb51a5e1cea816b8a",
       "remoteDeploymentId": "b28e914e-a094-4f42-ac62-361500562a41",
       "kind": "uups"
+    },
+    {
+      "address": "0x8a8DB3408c9b9Fc581951E84471bcF9E32CD129A",
+      "txHash": "0x96fc3c0cd052bba9a649e8cf07063f2db4acf2dd078f2bd2a8286f6c422611c4",
+      "remoteDeploymentId": "0d188c62-0763-4f8f-a701-0a3e826baa6c",
+      "kind": "uups"
     }
   ],
   "impls": {
@@ -1728,6 +1734,292 @@
               "label": "_paused",
               "type": "t_bool",
               "src": "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol:21",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "8d73ff9d40a8978eeb57cdf729f6dcf8982511e2b560141a2afcfda4b8782087": {
+      "address": "0x6b19F6B9eA928a0c0d9820d581F68aa07c1cB4da",
+      "txHash": "0xf1ee8871db060671acdaf6f8f3c9a0b6523f7c7305ba04e13872e73657698c4c",
+      "remoteDeploymentId": "c1aa4e25-909d-4f92-8d0e-c52e24115785",
+      "layout": {
+        "solcVersion": "0.8.23",
+        "storage": [
+          {
+            "label": "vestingCategories",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "LockonVesting",
+            "src": "contracts/LockonVesting.sol:55"
+          },
+          {
+            "label": "userVestingWallet",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_mapping(t_address,t_mapping(t_uint256,t_struct(VestingWallet)6076_storage))",
+            "contract": "LockonVesting",
+            "src": "contracts/LockonVesting.sol:59"
+          },
+          {
+            "label": "isAllowedDeposit",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_mapping(t_address,t_bool)",
+            "contract": "LockonVesting",
+            "src": "contracts/LockonVesting.sol:63"
+          },
+          {
+            "label": "isBlacklistUser",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_mapping(t_address,t_bool)",
+            "contract": "LockonVesting",
+            "src": "contracts/LockonVesting.sol:67"
+          },
+          {
+            "label": "listAllowedDeposit",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_array(t_address)dyn_storage",
+            "contract": "LockonVesting",
+            "src": "contracts/LockonVesting.sol:71"
+          },
+          {
+            "label": "allowedDepositOneBasedIndexes",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "LockonVesting",
+            "src": "contracts/LockonVesting.sol:75"
+          },
+          {
+            "label": "blacklist",
+            "offset": 0,
+            "slot": "6",
+            "type": "t_array(t_address)dyn_storage",
+            "contract": "LockonVesting",
+            "src": "contracts/LockonVesting.sol:79"
+          },
+          {
+            "label": "blacklistOneBasedIndexes",
+            "offset": 0,
+            "slot": "7",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "LockonVesting",
+            "src": "contracts/LockonVesting.sol:83"
+          },
+          {
+            "label": "lockToken",
+            "offset": 0,
+            "slot": "8",
+            "type": "t_contract(IERC20)1751",
+            "contract": "LockonVesting",
+            "src": "contracts/LockonVesting.sol:87"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "9",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "LockonVesting",
+            "src": "contracts/LockonVesting.sol:91"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_struct(InitializableStorage)64_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(OwnableStorage)14_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(PausableStorage)190_storage": {
+            "label": "struct PausableUpgradeable.PausableStorage",
+            "members": [
+              {
+                "label": "_paused",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(ReentrancyGuardStorage)251_storage": {
+            "label": "struct ReentrancyGuardUpgradeable.ReentrancyGuardStorage",
+            "members": [
+              {
+                "label": "_status",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_contract(IERC20)1751": {
+            "label": "contract IERC20",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_mapping(t_uint256,t_struct(VestingWallet)6076_storage))": {
+            "label": "mapping(address => mapping(uint256 => struct LockonVesting.VestingWallet))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(VestingWallet)6076_storage)": {
+            "label": "mapping(uint256 => struct LockonVesting.VestingWallet)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(VestingWallet)6076_storage": {
+            "label": "struct LockonVesting.VestingWallet",
+            "members": [
+              {
+                "label": "userAddress",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "vestingAmount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "claimableAmount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "claimedAmount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "startTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "categoryId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              }
+            ],
+            "numberOfBytes": "192"
+          }
+        },
+        "namespaces": {
+          "erc7201:openzeppelin.storage.Pausable": [
+            {
+              "contract": "PausableUpgradeable",
+              "label": "_paused",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol:21",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.ReentrancyGuard": [
+            {
+              "contract": "ReentrancyGuardUpgradeable",
+              "label": "_status",
+              "type": "t_uint256",
+              "src": "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol:40",
               "offset": 0,
               "slot": "0"
             }

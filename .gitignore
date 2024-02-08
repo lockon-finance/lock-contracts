@@ -29,6 +29,7 @@ artifacts
 
 # Yarn
 yarn-error.log
+package-lock.json
 
 # OpenZeppelin
 .openzeppelin/dev-*.json
