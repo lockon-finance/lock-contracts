@@ -39,13 +39,13 @@ contract AirdropTest is Test {
         lockToken.transfer(ACCOUNT_TWO, TEST_ACCOUNT_INITIAL_LOCK_BALANCE);
         airdrop = new Airdrop();
         lockonVesting = new LockonVesting();
+        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken)));
+        lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
+        lockonVesting = LockonVesting(address(lockonVestingProxy));
         deal(OWNER, 100 ether);
     }
 
     function initializeAndConfig() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken)));
-        lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
-        lockonVesting = LockonVesting(address(lockonVestingProxy));
         bytes memory airdropData =
             abi.encodeCall(airdrop.initialize, (OWNER, address(lockonVesting), address(lockToken), 0));
         airdropProxy = new ERC1967Proxy(address(airdrop), airdropData);
@@ -58,6 +58,28 @@ contract AirdropTest is Test {
         lockToken.approve(validator, 100000 ether);
         vm.prank(ACCOUNT_ONE);
         lockonVesting.addAddressDepositPermission(address(airdrop));
+    }
+
+    function test_initialize_fail_owner_zero_address() public {
+        vm.expectRevert("Airdrop: owner is the zero address");
+        bytes memory airdropData =
+            abi.encodeCall(airdrop.initialize, (address(0), address(lockonVesting), address(lockToken), 0));
+        airdropProxy = new ERC1967Proxy(address(airdrop), airdropData);
+        airdrop = Airdrop(address(airdropProxy));
+    }
+
+    function test_initialize_fail_lockon_vesting_zero_address() public {
+        vm.expectRevert("Airdrop: lockonVesting is the zero address");
+        bytes memory airdropData = abi.encodeCall(airdrop.initialize, (OWNER, address(0), address(lockToken), 0));
+        airdropProxy = new ERC1967Proxy(address(airdrop), airdropData);
+        airdrop = Airdrop(address(airdropProxy));
+    }
+
+    function test_initialize_fail_lock_token_zero_address() public {
+        vm.expectRevert("Airdrop: lockToken is the zero address");
+        bytes memory airdropData = abi.encodeCall(airdrop.initialize, (OWNER, address(lockonVesting), address(0), 0));
+        airdropProxy = new ERC1967Proxy(address(airdrop), airdropData);
+        airdrop = Airdrop(address(airdropProxy));
     }
 
     function test_distribute_airdrop_reward() public {
@@ -136,6 +158,19 @@ contract AirdropTest is Test {
         listUser[1] = address(0);
         vm.expectRevert("Airdrop: Zero address is not allowed");
         airdrop.distributeAirdropReward(listUser, listTestAmount);
+        address[] memory listUserData = new address[](1301);
+        uint256[] memory listAmountData = new uint256[](1301);
+        for (uint256 i; i < 1301;) {
+            uint256 number = i + 3;
+            string memory stringNumber = vm.toString(number);
+            listUserData[i] = address(bytes20(bytes(stringNumber)));
+            listAmountData[i] = (i + 1) * 10;
+            unchecked {
+                i++;
+            }
+        }
+        vm.expectRevert("Airdrop: Too many addresses");
+        airdrop.distributeAirdropReward(listUserData, listAmountData);
     }
 
     function test_claim_pending_reward_fail() public {
@@ -170,15 +205,16 @@ contract AirdropTest is Test {
     function test_deallocate_token() public {
         initializeAndConfig();
         uint256 oldLockBalance = lockToken.balanceOf(address(airdrop));
-        // Using account one
         vm.startPrank(OWNER);
         vm.recordLogs();
         // Deallocate amount of LOCK token
+        lockToken.approve(address(airdrop), lockAmount * 2);
+        airdrop.allocateLockToken(lockAmount * 2);
         lockToken.approve(address(airdrop), lockAmount);
         airdrop.deallocateLockToken(lockAmount);
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        assertEq(entries[2].topics[0], keccak256("LockTokenDeallocated(address,uint256)"));
-        assertEq(lockToken.balanceOf(address(airdrop)), oldLockBalance - lockAmount);
+        assertEq(entries[5].topics[0], keccak256("LockTokenDeallocated(address,uint256)"));
+        assertEq(lockToken.balanceOf(address(airdrop)), oldLockBalance + lockAmount);
     }
 
     function test_set_lockon_vesting_address() public {

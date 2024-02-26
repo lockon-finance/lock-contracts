@@ -27,6 +27,20 @@ contract LockTokenTest is Test {
         lockToken = LockToken(address(tokenProxy));
     }
 
+    function test__initialize_fail_owner_address() public {
+        vm.expectRevert("LockToken: ownerAddress is the zero address");
+        bytes memory tokenData = abi.encodeCall(lockToken.initialize, ("LockToken", "LOCK", address(0), MANAGEMENT));
+        tokenProxy = new ERC1967Proxy(address(lockToken), tokenData);
+        lockToken = LockToken(address(tokenProxy));
+    }
+
+    function test__initialize_fail_management_address() public {
+        vm.expectRevert("LockToken: managementAddress is the zero address");
+        bytes memory tokenData = abi.encodeCall(lockToken.initialize, ("LockToken", "LOCK", OWNER, address(0)));
+        tokenProxy = new ERC1967Proxy(address(lockToken), tokenData);
+        lockToken = LockToken(address(tokenProxy));
+    }
+
     function test__initilize_and_mint_succeed() public {
         initializeAndConfig();
         uint256 ownerBalance = lockToken.balanceOf(OWNER);

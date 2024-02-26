@@ -25,6 +25,7 @@ contract LockStakingTest is Test {
     address public validator = vm.addr(VALIDATOR_PRIVATE_KEY);
     uint256 public constant TEST_ACCOUNT_INITIAL_LOCK_BALANCE = 1000 ether;
     uint256 lockAmount = 1 ether;
+    uint256 private constant PRECISION = 1e12;
 
     error OwnableUnauthorizedAccount(address account);
 
@@ -80,7 +81,7 @@ contract LockStakingTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function test_initialize_fail() public {
+    function test_initialize_fail_bonus_rate() public {
         vm.expectRevert("LOCK Staking: Bonus rate per second must be greater than 0");
         bytes memory lockStakingData = abi.encodeCall(
             lockStaking.initialize,
@@ -100,15 +101,113 @@ contract LockStakingTest is Test {
         lockStaking = LockStaking(address(lockStakingProxy));
     }
 
+    function test_initialize_fail_owner_zero_address() public {
+        vm.expectRevert("LOCK Staking: owner is the zero address");
+        bytes memory lockStakingData = abi.encodeCall(
+            lockStaking.initialize,
+            (
+                address(0),
+                validator, // For testing, use validator as penalty fee receiver also
+                address(lockonVesting),
+                validator, // For testing, use validator as penalty fee receiver also
+                address(lockToken),
+                0,
+                100000 ether,
+                34730,
+                10
+            )
+        );
+        lockStakingProxy = new ERC1967Proxy(address(lockStaking), lockStakingData);
+        lockStaking = LockStaking(address(lockStakingProxy));
+    }
+
+    function test_initialize_fail_validator_zero_address() public {
+        vm.expectRevert("LOCK Staking: validator is the zero address");
+        bytes memory lockStakingData = abi.encodeCall(
+            lockStaking.initialize,
+            (
+                OWNER,
+                address(0),
+                address(lockonVesting),
+                validator, // For testing, use validator as penalty fee receiver also
+                address(lockToken),
+                0,
+                100000 ether,
+                34730,
+                10
+            )
+        );
+        lockStakingProxy = new ERC1967Proxy(address(lockStaking), lockStakingData);
+        lockStaking = LockStaking(address(lockStakingProxy));
+    }
+
+    function test_initialize_fail_lockon_vesting_zero_address() public {
+        vm.expectRevert("LOCK Staking: lockonVesting is the zero address");
+        bytes memory lockStakingData = abi.encodeCall(
+            lockStaking.initialize,
+            (
+                OWNER,
+                validator, // For testing, use validator as penalty fee receiver also
+                address(0),
+                validator, // For testing, use validator as penalty fee receiver also
+                address(lockToken),
+                0,
+                100000 ether,
+                34730,
+                10
+            )
+        );
+        lockStakingProxy = new ERC1967Proxy(address(lockStaking), lockStakingData);
+        lockStaking = LockStaking(address(lockStakingProxy));
+    }
+
+    function test_initialize_fail_fee_receiver_zero_address() public {
+        vm.expectRevert("LOCK Staking: feeReceiver is the zero address");
+        bytes memory lockStakingData = abi.encodeCall(
+            lockStaking.initialize,
+            (
+                OWNER,
+                validator, // For testing, use validator as penalty fee receiver also
+                address(lockonVesting),
+                address(0), // For testing, use validator as penalty fee receiver also
+                address(lockToken),
+                0,
+                100000 ether,
+                34730,
+                10
+            )
+        );
+        lockStakingProxy = new ERC1967Proxy(address(lockStaking), lockStakingData);
+        lockStaking = LockStaking(address(lockStakingProxy));
+    }
+
+    function test_initialize_fail_lock_token_zero_address() public {
+        vm.expectRevert("LOCK Staking: lockToken is the zero address");
+        bytes memory lockStakingData = abi.encodeCall(
+            lockStaking.initialize,
+            (
+                OWNER,
+                validator, // For testing, use validator as penalty fee receiver also
+                address(lockonVesting),
+                validator, // For testing, use validator as penalty fee receiver also
+                address(0),
+                0,
+                100000 ether,
+                34730,
+                10
+            )
+        );
+        lockStakingProxy = new ERC1967Proxy(address(lockStaking), lockStakingData);
+        lockStaking = LockStaking(address(lockStakingProxy));
+    }
+
     function test_add_lock_token() public {
         initializeAndConfig();
         // Using account one
         vm.startPrank(ACCOUNT_ONE);
         lockToken.approve(address(lockStaking), 1 ether);
         // Lock one Lock Token for 200 days
-        vm.recordLogs();
         lockStaking.addLockToken(lockAmount, 200 days);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
         uint256 ACCOUNT_ONEBalanceAfterFirstLock = TEST_ACCOUNT_INITIAL_LOCK_BALANCE - lockAmount;
         assertEq(lockToken.balanceOf(ACCOUNT_ONE), ACCOUNT_ONEBalanceAfterFirstLock);
         // Get account one first lock data
@@ -123,9 +222,8 @@ contract LockStakingTest is Test {
         ) = lockStaking.userInfo(ACCOUNT_ONE);
         uint256 userLastBasicRate = 1e12;
         uint256 userLockScore =
-            ((lockAmount * userLastBasicRate) * lockStaking.durationRate(200 days)) / 1e12 / lockStaking.PRECISION();
-        uint256 userCumulativePendingReward =
-            ((userLockScore * lockStaking.rewardPerScore()) / lockStaking.PRECISION()) - rewardDebt;
+            ((lockAmount * userLastBasicRate) * lockStaking.durationRate(200 days)) / 1e12 / PRECISION;
+        uint256 userCumulativePendingReward = ((userLockScore * lockStaking.rewardPerScore()) / PRECISION) - rewardDebt;
         assertEq(lockedAmount, lockAmount);
         assertEq(lockDuration, 200 days);
         assertEq(lockScore, userLockScore);
@@ -135,24 +233,24 @@ contract LockStakingTest is Test {
         assertEq(cumulativePendingReward, userCumulativePendingReward);
         assertEq(lockStaking.totalLockScore(), lockScore);
         assertEq(lockStaking.totalLockedAmount(), lockAmount);
-        // Check for emitted event
-        assertEq(entries[2].topics[0], keccak256("LockTokenAdded(address,uint256,uint256,uint256,uint256,uint256)"));
         // Skip 100 days then lock another one Lock Token
         skip(100 days);
+        vm.recordLogs();
         lockToken.approve(address(lockStaking), 1 ether);
         lockStaking.addLockToken(lockAmount, 300 days);
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        // Check for emitted event
+        assertEq(entries[1].topics[0], keccak256("PoolDataUpdated(address,uint256,uint256,uint256)"));
+        assertEq(entries[4].topics[0], keccak256("LockTokenAdded(address,uint256,uint256,uint256,uint256,uint256)"));
         // Get account one second lock data
-        (lockedAmount, lockScore, lockDuration, lastBasicRate, rewardDebt, lockEndTimestamp,) =
-            lockStaking.userInfo(ACCOUNT_ONE);
+        (lockedAmount, lockScore,, lastBasicRate, rewardDebt, lockEndTimestamp,) = lockStaking.userInfo(ACCOUNT_ONE);
         assertEq(lockToken.balanceOf(ACCOUNT_ONE), ACCOUNT_ONEBalanceAfterFirstLock - lockAmount);
-        userLastBasicRate = 1e12 + (100 days * lockStaking.basicRateDivider() * 1e12) / lockStaking.PRECISION();
-        userLockScore =
-            ((lockedAmount * userLastBasicRate) * lockStaking.durationRate(300 days)) / 1e12 / lockStaking.PRECISION();
+        userLastBasicRate = 1e12 + (100 days * lockStaking.basicRateDivider() * 1e12) / PRECISION;
+        userLockScore = ((lockedAmount * userLastBasicRate) * lockStaking.durationRate(300 days)) / 1e12 / PRECISION;
         userCumulativePendingReward = getCumulativeOfUser(lockStaking, ACCOUNT_ONE)
-            + ((userLockScore * lockStaking.rewardPerScore()) / lockStaking.PRECISION()) - rewardDebt;
+            + ((userLockScore * lockStaking.rewardPerScore()) / PRECISION) - rewardDebt;
         assertEq(lockedAmount, lockAmount * 2);
         assertEq(lockScore, userLockScore);
-        assertEq(lockDuration, 300 days);
         assertEq(lastBasicRate, userLastBasicRate);
         assertEq(lockEndTimestamp, (300 days + 200 days - 100 days) + 1);
         assertEq(lockStaking.totalLockScore(), userLockScore);
@@ -245,22 +343,21 @@ contract LockStakingTest is Test {
         // lockedAmount does not change because it is just extend lock duration
         assertEq(lockedAmount, lockAmount);
         uint256 userLockScoreAfter =
-            ((lockAmount * lastBasicRate) * lockStaking.durationRate(300 days)) / 1e12 / lockStaking.PRECISION();
+            ((lockAmount * lastBasicRate) * lockStaking.durationRate(300 days)) / 1e12 / PRECISION;
         assertEq(lockScore, userLockScoreAfter);
         assertEq(lockStaking.totalLockScore(), totalLockScore - userLockScore + userLockScoreAfter);
         assertEq(lockStaking.totalLockedAmount(), lockAmount);
         // Lock duration should be 300 days
         assertEq(lockDuration, 300 days);
-        assertEq(lastBasicRate, 1e12 + (30 days * lockStaking.basicRateDivider() * 1e12) / lockStaking.PRECISION());
+        assertEq(lastBasicRate, 1e12 + (30 days * lockStaking.basicRateDivider() * 1e12) / PRECISION);
         assertEq(getRewardDebtOfUser(lockStaking, ACCOUNT_ONE), (lockScore * lockStaking.rewardPerScore()) / 1e12);
         // Cumulative pending reward should be updated
         assertEq(
             getCumulativeOfUser(lockStaking, ACCOUNT_ONE),
-            calculateCumulatePendingReward(
-                userLockScore, lockStaking.rewardPerScore(), lockStaking.PRECISION(), rewardDebt
-            )
+            calculateCumulatePendingReward(userLockScore, lockStaking.rewardPerScore(), PRECISION, rewardDebt)
         );
         // Check for emitted event
+        assertEq(entries[0].topics[0], keccak256("PoolDataUpdated(address,uint256,uint256,uint256)"));
         assertEq(entries[2].topics[0], keccak256("ExtendLockDuration(address,uint256,uint256,uint256,uint256)"));
     }
 
@@ -304,19 +401,19 @@ contract LockStakingTest is Test {
         assertEq(lockStaking.totalLockScore(), lockScore);
         assertEq(lockStaking.totalLockedAmount(), lockAmount);
         lockStaking.withdrawLockToken(lockAmount);
-        uint256 userCumulativePendingReward =
-            (lockScore * lockStaking.rewardPerScore()) / lockStaking.PRECISION() - rewardDebt;
+        uint256 userCumulativePendingReward = (lockScore * lockStaking.rewardPerScore()) / PRECISION - rewardDebt;
         (, lockScore,,, rewardDebt,, cumulativePendingReward) = lockStaking.userInfo(ACCOUNT_ONE);
         assertEq(lockStaking.totalLockScore(), 0);
         assertEq(lockStaking.totalLockedAmount(), 0);
         assertEq(cumulativePendingReward, userCumulativePendingReward);
-        uint256 penaltyFee = (lockAmount * lockStaking.penaltyRate()) / lockStaking.PRECISION();
+        uint256 penaltyFee = (lockAmount * lockStaking.penaltyRate()) / PRECISION;
         Vm.Log[] memory entries = vm.getRecordedLogs();
         uint256 validatorBalanceAfter = lockToken.balanceOf(validator);
         uint256 ACCOUNT_ONEBalanceAfter = lockToken.balanceOf(ACCOUNT_ONE);
         assertEq(validatorBalanceAfter, validatorBalanceBefore + penaltyFee);
         assertEq(ACCOUNT_ONEBalanceAfter, ACCOUNT_ONEBalanceBefore + lockAmount - penaltyFee);
         // Check for emitted event, since the penalty is applied, there will be 7 more event emitted before the withdraw event is emitted
+        assertEq(entries[0].topics[0], keccak256("PoolDataUpdated(address,uint256,uint256,uint256)"));
         assertEq(entries[4].topics[0], keccak256("WithdrawLockToken(address,uint256,uint256,uint256)"));
         // Lock another one Lock Token and then skip 200 days
         lockToken.approve(address(lockStaking), 1 ether);
@@ -400,6 +497,7 @@ contract LockStakingTest is Test {
         vm.roll(block.number + 1);
         Vm.Log[] memory entries = vm.getRecordedLogs();
         assertEq(lockToken.balanceOf(address(lockonVesting)), lockonVestingBalanceBefore + pendingReward + rewardAmount);
+        assertEq(entries[0].topics[0], keccak256("PoolDataUpdated(address,uint256,uint256,uint256)"));
         assertEq(entries[4].topics[0], keccak256("ClaimLockStakingReward(address,string,uint256,uint256,uint256)"));
     }
 
@@ -513,7 +611,7 @@ contract LockStakingTest is Test {
             basicRate,
             1e12
                 + ((block.timestamp - lockStaking.lockTokenReleasedTimestamp()) * lockStaking.basicRateDivider() * 1e12)
-                    / lockStaking.PRECISION()
+                    / PRECISION
         );
         uint256 rate = lockStaking.durationRate(1 days);
         assertEq(rate, 0);
@@ -556,35 +654,6 @@ contract LockStakingTest is Test {
         Vm.Log[] memory entries = vm.getRecordedLogs();
         assertEq(entries[2].topics[0], keccak256("LockTokenDeallocated(address,uint256)"));
         assertEq(lockToken.balanceOf(address(lockStaking)), oldLockBalance - lockAmount);
-    }
-
-    function test_update_pool_failed() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken)));
-        lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
-        lockonVesting = LockonVesting(address(lockonVestingProxy));
-        bytes memory lockStakingData = abi.encodeCall(
-            lockStaking.initialize,
-            (
-                OWNER,
-                validator, // For testing, use validator as penalty fee receiver also
-                address(lockonVesting),
-                validator, // For testing, use validator as penalty fee receiver also
-                address(lockToken),
-                0,
-                100000 ether,
-                347300,
-                1000
-            )
-        );
-        lockStakingProxy = new ERC1967Proxy(address(lockStaking), lockStakingData);
-        lockStaking = LockStaking(address(lockStakingProxy));
-        vm.startPrank(ACCOUNT_ONE);
-        lockToken.approve(address(lockStaking), 1000 ether);
-        lockStaking.addLockToken(1000 ether, 301 days);
-        vm.expectRevert("LOCK Staking: Reward distributed exceed supply");
-        skip(300 days);
-        // Reward not transfer to contract so no reward supply
-        lockStaking.updatePool();
     }
 
     function test_revert_on_deposit_vesting() public {

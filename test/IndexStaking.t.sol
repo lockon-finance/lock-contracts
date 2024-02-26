@@ -46,6 +46,7 @@ contract IndexStakingTest is Test {
     address public validator = vm.addr(VALIDATOR_PRIVATE_KEY);
     uint256 public constant TEST_ACCOUNT_INITIAL_BALANCE = 1000 ether;
     uint256 public constant CUMULATIVE_PENDING_REWARD = 1 ether;
+    uint256 private constant PRECISION = 1e12;
 
     error OwnableUnauthorizedAccount(address account);
 
@@ -130,6 +131,84 @@ contract IndexStakingTest is Test {
         indexStaking = IndexStaking(address(indexStakingProxy));
     }
 
+    function test_initialize_fail_owner_zero_address() public {
+        IndexStaking.InitPoolInfo memory firstPoolInfo =
+            IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2300, block.timestamp);
+        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
+        poolInfos[0] = firstPoolInfo;
+        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp);
+        vm.expectRevert("Index Staking: owner is the zero address");
+        bytes memory indexStakingData = abi.encodeCall(
+            indexStaking.initialize,
+            (
+                address(0),
+                validator,
+                address(lockonVesting),
+                address(lockToken),
+                100000 ether,
+                "INDEX_STAKING",
+                "1",
+                poolInfos
+            )
+        );
+        indexStakingProxy = new ERC1967Proxy(address(indexStaking), indexStakingData);
+        indexStaking = IndexStaking(address(indexStakingProxy));
+    }
+
+    function test_initialize_fail_validator_zero_address() public {
+        IndexStaking.InitPoolInfo memory firstPoolInfo =
+            IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2300, block.timestamp);
+        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
+        poolInfos[0] = firstPoolInfo;
+        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp);
+        vm.expectRevert("Index Staking: validator is the zero address");
+        bytes memory indexStakingData = abi.encodeCall(
+            indexStaking.initialize,
+            (
+                OWNER,
+                address(0),
+                address(lockonVesting),
+                address(lockToken),
+                100000 ether,
+                "INDEX_STAKING",
+                "1",
+                poolInfos
+            )
+        );
+        indexStakingProxy = new ERC1967Proxy(address(indexStaking), indexStakingData);
+        indexStaking = IndexStaking(address(indexStakingProxy));
+    }
+
+    function test_initialize_fail_lockon_vesting_zero_address() public {
+        IndexStaking.InitPoolInfo memory firstPoolInfo =
+            IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2300, block.timestamp);
+        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
+        poolInfos[0] = firstPoolInfo;
+        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp);
+        vm.expectRevert("Index Staking: lockonVesting is the zero address");
+        bytes memory indexStakingData = abi.encodeCall(
+            indexStaking.initialize,
+            (OWNER, validator, address(0), address(lockToken), 100000 ether, "INDEX_STAKING", "1", poolInfos)
+        );
+        indexStakingProxy = new ERC1967Proxy(address(indexStaking), indexStakingData);
+        indexStaking = IndexStaking(address(indexStakingProxy));
+    }
+
+    function test_initialize_fail_lock_token_zero_address() public {
+        IndexStaking.InitPoolInfo memory firstPoolInfo =
+            IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2300, block.timestamp);
+        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
+        poolInfos[0] = firstPoolInfo;
+        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp);
+        vm.expectRevert("Index Staking: lockToken is the zero address");
+        bytes memory indexStakingData = abi.encodeCall(
+            indexStaking.initialize,
+            (OWNER, validator, address(lockonVesting), address(0), 100000 ether, "INDEX_STAKING", "1", poolInfos)
+        );
+        indexStakingProxy = new ERC1967Proxy(address(indexStaking), indexStakingData);
+        indexStaking = IndexStaking(address(indexStakingProxy));
+    }
+
     function test_initialize_fail_pool_bonus_rate() public {
         IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
         poolInfos[0] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_THREE), 0, block.timestamp);
@@ -193,12 +272,10 @@ contract IndexStakingTest is Test {
         uint256 depositAmount = 1 ether;
         uint256 currentRewardAmount = indexStaking.currentRewardAmount();
         // Deposit one LPI token to according pool for staking
-        vm.recordLogs();
         lpiToken.approve(address(indexStaking), depositAmount);
         indexStaking.deposit(address(lpiToken), depositAmount);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-        uint256 ACCOUNT_ONEBalanceAfterDeposit = TEST_ACCOUNT_INITIAL_BALANCE - depositAmount;
-        assertEq(lpiToken.balanceOf(ACCOUNT_ONE), ACCOUNT_ONEBalanceAfterDeposit);
+        uint256 accOneBalanceAfterDeposit = TEST_ACCOUNT_INITIAL_BALANCE - depositAmount;
+        assertEq(lpiToken.balanceOf(ACCOUNT_ONE), accOneBalanceAfterDeposit);
         assertEq(lpiToken.balanceOf(address(indexStaking)), depositAmount);
         // Get account one data after deposit
         (, uint256 totalStakedAmount, uint256 rewardPerToken, uint256 bonusRatePerSecond, uint256 lastRewardTimestamp,)
@@ -211,15 +288,10 @@ contract IndexStakingTest is Test {
         assertEq(stakedAmount, depositAmount);
         assertEq(lastStakedTimestamp, block.timestamp);
         assertEq(rewardDebt, 0);
-        // Check for emitted event
-        assertEq(
-            entries[2].topics[0],
-            keccak256("DepositSucceeded(address,address,uint256,uint256,uint256,uint256,uint256,uint256)")
-        );
         // Still using account one, deposit to other pool (LBI Pool)
         lbiToken.approve(address(indexStaking), depositAmount);
         indexStaking.deposit(address(lbiToken), depositAmount);
-        assertEq(lbiToken.balanceOf(ACCOUNT_ONE), ACCOUNT_ONEBalanceAfterDeposit);
+        assertEq(lbiToken.balanceOf(ACCOUNT_ONE), accOneBalanceAfterDeposit);
         assertEq(lbiToken.balanceOf(address(indexStaking)), depositAmount);
         (, totalStakedAmount, rewardPerToken,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lbiToken));
         assertEq(rewardPerToken, 0);
@@ -231,9 +303,11 @@ contract IndexStakingTest is Test {
         assertEq(rewardDebt, 0);
         // Deposit into the same LBI pool and check for data
         skip(1);
+        vm.recordLogs();
         lbiToken.approve(address(indexStaking), depositAmount);
         indexStaking.deposit(address(lbiToken), depositAmount);
-        assertEq(lbiToken.balanceOf(ACCOUNT_ONE), ACCOUNT_ONEBalanceAfterDeposit - depositAmount);
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        assertEq(lbiToken.balanceOf(ACCOUNT_ONE), accOneBalanceAfterDeposit - depositAmount);
         assertEq(lbiToken.balanceOf(address(indexStaking)), depositAmount * 2);
 
         (, totalStakedAmount, rewardPerToken,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lbiToken));
@@ -243,7 +317,13 @@ contract IndexStakingTest is Test {
         (stakedAmount, lastStakedTimestamp, rewardDebt,) = indexStaking.userInfo(ACCOUNT_ONE, address(lbiToken));
         assertEq(stakedAmount, depositAmount * 2);
         assertEq(lastStakedTimestamp, block.timestamp);
-        assertEq(rewardDebt, depositAmount * 2 * rewardPerToken / indexStaking.PRECISION());
+        assertEq(rewardDebt, depositAmount * 2 * rewardPerToken / PRECISION);
+        // Check for emitted event
+        assertEq(entries[1].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
+        assertEq(
+            entries[3].topics[0],
+            keccak256("DepositSucceeded(address,address,uint256,uint256,uint256,uint256,uint256,uint256)")
+        );
         // Using account two to deposit into LPI pool, skip data check
         vm.stopPrank();
         vm.startPrank(ACCOUNT_TWO);
@@ -305,7 +385,7 @@ contract IndexStakingTest is Test {
         assertEq(lastRewardTimestamp, block.timestamp);
         (stakedAmount, lastStakedTimestamp, rewardDebt,) = indexStaking.userInfo(ACCOUNT_ONE, address(lpiToken));
         assertEq(stakedAmount, depositAmount * 7 / 10);
-        assertEq(rewardDebt, rewardPerToken * stakedAmount / indexStaking.PRECISION());
+        assertEq(rewardDebt, rewardPerToken * stakedAmount / PRECISION);
         skip(10 days);
         currentRewardAmount = indexStaking.currentRewardAmount();
         indexStaking.withdraw(address(lpiToken), withdrawAmount);
@@ -318,11 +398,12 @@ contract IndexStakingTest is Test {
         (stakedAmount, lastStakedTimestamp, rewardDebt,) = indexStaking.userInfo(ACCOUNT_ONE, address(lpiToken));
         assertEq(stakedAmount, depositAmount * 4 / 10);
         assertEq(lastStakedTimestamp, 1);
-        assertEq(rewardDebt, stakedAmount * rewardPerToken / indexStaking.PRECISION());
+        assertEq(rewardDebt, stakedAmount * rewardPerToken / PRECISION);
         Vm.Log[] memory entries = vm.getRecordedLogs();
         uint256 ACCOUNT_ONEBalanceAfter = lpiToken.balanceOf(ACCOUNT_ONE);
         assertEq(ACCOUNT_ONEBalanceAfter, ACCOUNT_ONEBalanceBefore + withdrawAmount * 2);
         // Check for emitted event
+        assertEq(entries[0].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
         assertEq(
             entries[2].topics[0],
             keccak256("WithdrawSucceeded(address,address,uint256,uint256,uint256,uint256,uint256)")
@@ -375,14 +456,12 @@ contract IndexStakingTest is Test {
         assertEq(
             getUserCumulativePendingReward(indexStaking, ACCOUNT_ONE, address(lpiToken)),
             calculateCumulatePendingReward(
-                stakeAmount,
-                getRewardPerTokenOfPool(indexStaking, address(lpiToken)),
-                indexStaking.PRECISION(),
-                userRewardDebt
+                stakeAmount, getRewardPerTokenOfPool(indexStaking, address(lpiToken)), PRECISION, userRewardDebt
             )
         );
         uint256 cumulativePendingRewardBeforeClaim =
             getUserCumulativePendingReward(indexStaking, ACCOUNT_ONE, address(lpiToken));
+        skip(10);
         vm.recordLogs();
         indexStaking.claimIndexStakingReward(
             requestId, address(lpiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signature
@@ -394,6 +473,7 @@ contract IndexStakingTest is Test {
         Vm.Log[] memory entries = vm.getRecordedLogs();
         // Transfer token to vesting contract
         assertEq(lockToken.balanceOf(address(lockonVesting)), accountContractVestingBefore + claimAmount);
+        assertEq(entries[0].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
         assertEq(
             entries[4].topics[0], keccak256("IndexStakingRewardClaimed(address,string,address,uint256,uint256,uint256)")
         );
@@ -616,12 +696,8 @@ contract IndexStakingTest is Test {
         assertEq(indexStaking.currentRewardAmount(), 99890 ether);
         vm.roll(block.number + 1);
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        assertEq(entries[0].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
-        assertEq(entries[1].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
-        assertEq(entries[2].topics[0], keccak256("CurrentRewardAmountUpdated(address,uint256,uint256)"));
-        assertEq(entries[3].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
-        assertEq(entries[4].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
-        assertEq(entries[5].topics[0], keccak256("CurrentRewardAmountUpdated(address,uint256,uint256)"));
+        assertEq(entries[0].topics[0], keccak256("CurrentRewardAmountUpdated(address,uint256,uint256)"));
+        assertEq(entries[1].topics[0], keccak256("CurrentRewardAmountUpdated(address,uint256,uint256)"));
     }
 
     function test_update_current_reward_amount_fail() public {
@@ -722,9 +798,7 @@ contract IndexStakingTest is Test {
     function test_view_function() public {
         initializeAndConfig();
         vm.startPrank(OWNER);
-        assertEq(
-            indexStaking.rewardTokenPerSecond(address(lpiToken)), 100000 ether * 2300 / 2 / indexStaking.PRECISION()
-        );
+        assertEq(indexStaking.rewardTokenPerSecond(address(lpiToken)), 100000 ether * 2300 / 2 / PRECISION);
         assertEq(
             indexStaking.getRewardMultiplier(address(lpiToken), 100, 1000),
             (1000 - 100) * indexStaking.rewardTokenPerSecond(address(lpiToken))
@@ -732,144 +806,6 @@ contract IndexStakingTest is Test {
         assertEq(
             indexStaking.getRewardMultiplier(address(lpiToken), 1, 100000 days), indexStaking.currentRewardAmount()
         );
-    }
-
-    function test__update_pool() public {
-        lockonVesting.addAddressDepositPermission(address(indexStaking));
-        IndexStaking.InitPoolInfo memory firstPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.timestamp);
-        IndexStaking.InitPoolInfo memory secondPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300, block.timestamp);
-        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
-        poolInfos[0] = firstPoolInfo;
-        poolInfos[1] = secondPoolInfo;
-        bytes memory indexStakingData = abi.encodeCall(
-            indexStaking.initialize,
-            (
-                OWNER,
-                validator,
-                address(lockonVesting),
-                address(lockToken),
-                100000 ether,
-                "INDEX_STAKING",
-                "1",
-                poolInfos
-            )
-        );
-        indexStakingProxy = new ERC1967Proxy(address(indexStaking), indexStakingData);
-        indexStaking = IndexStaking(address(indexStakingProxy));
-        uint256 depositAmount = 1 ether;
-
-        lbiToken.transfer(address(indexStaking), depositAmount * 2);
-        lbiToken.transfer(ACCOUNT_ONE, depositAmount * 2);
-        lockToken.transfer(address(indexStaking), 1000 ether);
-        lockToken.approve(address(indexStaking), depositAmount * 2);
-
-        vm.stopPrank();
-        vm.startPrank(ACCOUNT_ONE);
-        lbiToken.approve(address(indexStaking), depositAmount * 2);
-        uint256 currentRewardAmount = indexStaking.currentRewardAmount();
-
-        // user first deposit
-        indexStaking.deposit(address(lbiToken), depositAmount);
-        skip(10 days);
-        (, uint256 totalStakedAmount, uint256 rewardPerToken, uint256 bonusRatePerSecond, uint256 lastRewardTimestamp,)
-        = indexStaking.tokenPoolInfo(address(lbiToken));
-        currentRewardAmount = indexStaking.currentRewardAmount();
-        indexStaking.updatePool(address(lbiToken));
-        indexStaking.deposit(address(lbiToken), depositAmount);
-        (,, rewardPerToken,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lbiToken));
-        assertEq(rewardPerToken, 10 days * currentRewardAmount * bonusRatePerSecond / 2 / totalStakedAmount);
-        assertEq(lastRewardTimestamp, 10 days + 1);
-    }
-
-    function test__update_set_current_reward_amount_failed_exceed_supply() public {
-        lockonVesting.addAddressDepositPermission(address(indexStaking));
-        IndexStaking.InitPoolInfo memory firstPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.timestamp);
-        IndexStaking.InitPoolInfo memory secondPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300000000, block.timestamp);
-        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
-        poolInfos[0] = firstPoolInfo;
-        poolInfos[1] = secondPoolInfo;
-        bytes memory indexStakingData = abi.encodeCall(
-            indexStaking.initialize,
-            (
-                OWNER,
-                validator,
-                address(lockonVesting),
-                address(lockToken),
-                100000 ether,
-                "INDEX_STAKING",
-                "1",
-                poolInfos
-            )
-        );
-        indexStakingProxy = new ERC1967Proxy(address(indexStaking), indexStakingData);
-        indexStaking = IndexStaking(address(indexStakingProxy));
-        uint256 depositAmount = 10000 ether;
-
-        lbiToken.transfer(address(indexStaking), depositAmount * 2);
-        lbiToken.transfer(ACCOUNT_ONE, depositAmount * 2);
-        lockToken.transfer(address(indexStaking), 10 ether);
-        lockToken.approve(address(indexStaking), depositAmount * 2);
-        vm.stopPrank();
-        vm.startPrank(ACCOUNT_ONE);
-        lbiToken.approve(address(indexStaking), depositAmount * 2);
-        // user first deposit pool lbi
-        indexStaking.deposit(address(lbiToken), depositAmount);
-        skip(900 days);
-        address[] memory tokenAddresses = new address[](2);
-        tokenAddresses[0] = address(lpiToken);
-        tokenAddresses[1] = address(lbiToken);
-        vm.stopPrank();
-        vm.startPrank(OWNER);
-        vm.expectRevert("Index Staking: Stake token reward distributed exceed supply");
-        indexStaking.updateCurrentRewardAmount(10 ether, tokenAddresses);
-    }
-
-    function test__update_pool_failed() public {
-        lockonVesting.addAddressDepositPermission(address(indexStaking));
-        IndexStaking.InitPoolInfo memory firstPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.timestamp);
-        IndexStaking.InitPoolInfo memory secondPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300000000, block.timestamp);
-        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
-        poolInfos[0] = firstPoolInfo;
-        poolInfos[1] = secondPoolInfo;
-        bytes memory indexStakingData = abi.encodeCall(
-            indexStaking.initialize,
-            (
-                OWNER,
-                validator,
-                address(lockonVesting),
-                address(lockToken),
-                100000 ether,
-                "INDEX_STAKING",
-                "1",
-                poolInfos
-            )
-        );
-        indexStakingProxy = new ERC1967Proxy(address(indexStaking), indexStakingData);
-        indexStaking = IndexStaking(address(indexStakingProxy));
-        uint256 depositAmount = 10000 ether;
-
-        lbiToken.transfer(address(indexStaking), depositAmount * 2);
-        lbiToken.transfer(ACCOUNT_ONE, depositAmount * 2);
-        lpiToken.transfer(address(indexStaking), depositAmount * 2);
-        lpiToken.transfer(ACCOUNT_ONE, depositAmount * 2);
-        lockToken.transfer(address(indexStaking), 10 ether);
-        lockToken.approve(address(indexStaking), depositAmount * 2);
-
-        vm.stopPrank();
-        vm.startPrank(ACCOUNT_ONE);
-        lbiToken.approve(address(indexStaking), depositAmount * 2);
-        lpiToken.approve(address(indexStaking), depositAmount * 2);
-        // user first deposit pool lbi
-        indexStaking.deposit(address(lbiToken), depositAmount);
-        skip(900 days);
-        vm.expectRevert("Index Staking: Stake token reward distributed exceed supply");
-        indexStaking.deposit(address(lbiToken), depositAmount);
     }
 
     function test__get_current_reward_per_token() public {
@@ -931,42 +867,6 @@ contract IndexStakingTest is Test {
         assertEq(rewardPerToken, 117 * currentRewardAmount * bonusRatePerSecond / 2 / oldTotalStakedAmount);
         assertEq(indexStaking.getCurrentRewardPerToken(address(lbiToken)), rewardPerToken);
         assertEq(totalStakedAmount, 0);
-    }
-
-    function test__get_current_reward_per_token_failed() public {
-        lockonVesting.addAddressDepositPermission(address(indexStaking));
-        IndexStaking.InitPoolInfo memory firstPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.timestamp);
-        IndexStaking.InitPoolInfo memory secondPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300000000000, block.timestamp);
-        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
-        poolInfos[0] = firstPoolInfo;
-        poolInfos[1] = secondPoolInfo;
-        bytes memory indexStakingData = abi.encodeCall(
-            indexStaking.initialize,
-            (OWNER, validator, address(lockonVesting), address(lockToken), 1000 ether, "INDEX_STAKING", "1", poolInfos)
-        );
-        indexStakingProxy = new ERC1967Proxy(address(indexStaking), indexStakingData);
-        indexStaking = IndexStaking(address(indexStakingProxy));
-        uint256 depositAmount = 10000 ether;
-
-        lbiToken.transfer(address(indexStaking), depositAmount * 2);
-        lbiToken.transfer(ACCOUNT_ONE, depositAmount * 2);
-        lpiToken.transfer(address(indexStaking), depositAmount * 2);
-        lpiToken.transfer(ACCOUNT_ONE, depositAmount * 2);
-        lockToken.transfer(address(indexStaking), 10 ether);
-        lockToken.approve(address(indexStaking), depositAmount * 2);
-
-        vm.stopPrank();
-        vm.startPrank(ACCOUNT_ONE);
-        lbiToken.approve(address(indexStaking), depositAmount * 2);
-        lpiToken.approve(address(indexStaking), depositAmount * 2);
-        // user first deposit pool lbi
-        indexStaking.deposit(address(lbiToken), depositAmount);
-        skip(900 days);
-        vm.expectRevert("Index Staking: Stake token reward distributed exceed supply");
-        indexStaking.deposit(address(lbiToken), depositAmount);
-        indexStaking.getCurrentRewardPerToken(address(lbiToken));
     }
 
     function test_allocate_token() public {

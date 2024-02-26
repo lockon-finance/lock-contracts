@@ -34,11 +34,11 @@ contract IndexStaking is
     /**
      * @dev Represents the scaling factor used in calculations
      */
-    uint256 public constant PRECISION = 1e12;
+    uint256 private constant PRECISION = 1e12;
     /**
      * @dev Represents the category INDEX STAKING in the LOCKON vesting
      */
-    uint256 public constant INDEX_STAKING_VESTING_CATEGORY_ID = 1;
+    uint256 private constant INDEX_STAKING_VESTING_CATEGORY_ID = 1;
 
     /* ============ Struct ============ */
 
@@ -346,6 +346,10 @@ contract IndexStaking is
         string memory _signatureVersion,
         InitPoolInfo[] calldata pools
     ) external initializer {
+        require(_owner != address(0), "Index Staking: owner is the zero address");
+        require(_validator != address(0), "Index Staking: validator is the zero address");
+        require(_lockonVesting != address(0), "Index Staking: lockonVesting is the zero address");
+        require(_lockToken != address(0), "Index Staking: lockToken is the zero address");
         EIP712Upgradeable.__EIP712_init(_domainName, _signatureVersion);
         // Initialize the contract and set the owner
         // This function should be called only once during deployment
@@ -368,7 +372,7 @@ contract IndexStaking is
             tokenPoolInfo[address(stakeToken)] =
                 PoolInfo(stakeToken, 0, 0, pools[i].bonusRatePerSecond, block.timestamp, pools[i].startTimestamp);
             unchecked {
-                i++;
+                ++i;
             }
         }
         currentNumOfPools += len;
@@ -421,23 +425,22 @@ contract IndexStaking is
     /**
      * @dev Updates the pool by calculating and distributing rewards to stakers based on the difference in block
      * timestamps between the last reward calculation and the current block. The function adjusts the reward rate
-     * per stake token and ensures that the reward distribution does not exceed the available reward supply.
+     * per stake token.
      * The function also updates the last reward block and deducts the distributed rewards from the current reward
      * amount.
      * @param _stakeToken Stake token address
      */
-    function updatePool(address _stakeToken) public {
+    function _updatePool(address _stakeToken) private {
         PoolInfo storage poolInfo = tokenPoolInfo[_stakeToken];
         if (poolInfo.totalStakedAmount == 0) {
             poolInfo.lastRewardTimestamp = block.timestamp;
             return;
         }
-        uint256 rewardSupply = lockToken.balanceOf(address(this));
         // Calculate the reward multiplier based on the difference in block timestamps
         uint256 lockReward = getRewardMultiplier(_stakeToken, poolInfo.lastRewardTimestamp, block.timestamp);
-        // Ensure that the reward supply is sufficient for the calculated rewards
-        require(rewardSupply >= lockReward, "Index Staking: Stake token reward distributed exceed supply");
-
+        if (lockReward == 0) {
+            return;
+        }
         // Update state data
         poolInfo.rewardPerToken += (lockReward * PRECISION) / poolInfo.totalStakedAmount;
         currentRewardAmount = currentRewardAmount - lockReward;
@@ -487,7 +490,7 @@ contract IndexStaking is
         require(pool.stakeToken != IERC20(address(0)), "Index Staking: Pool not exist");
         // Ensure that staking is allowed for this pool based on the current block timestamp
         require(block.timestamp >= pool.startTimestamp, "Index Staking: Staking not start");
-        updatePool(_stakeToken);
+        _updatePool(_stakeToken);
         uint256 pending = (user.stakedAmount * pool.rewardPerToken / PRECISION) - user.rewardDebt;
         if (pending != 0) {
             user.cumulativePendingReward += pending;
@@ -525,7 +528,7 @@ contract IndexStaking is
         UserInfo storage user = userInfo[msg.sender][_stakeToken];
         // Check if the withdrawal amount is less than or equal to the user's staked amount
         require(user.stakedAmount >= _withdrawAmount, "Index Staking: Withdrawal amount exceed stake amount");
-        updatePool(_stakeToken);
+        _updatePool(_stakeToken);
         uint256 pending = (user.stakedAmount * pool.rewardPerToken / PRECISION) - user.rewardDebt;
         if (pending != 0) {
             user.cumulativePendingReward += pending;
@@ -577,13 +580,16 @@ contract IndexStaking is
                 == validatorAddress,
             "Index Staking: Invalid signature"
         );
-        updatePool(_stakeToken);
+        _updatePool(_stakeToken);
         // Mark the requestId as processed to prevent duplicate claim
         isRequestIdProcessed[_requestId] = true;
         user.cumulativePendingReward -= _cumulativePendingReward;
         user.rewardDebt = (user.stakedAmount * pool.rewardPerToken) / PRECISION;
         // Approve for the contract vesting
-        lockToken.approve(lockonVesting, _claimAmount);
+        uint256 currentAllowance = lockToken.allowance(address(this), lockonVesting);
+        if (currentAllowance < _claimAmount) {
+            lockToken.safeIncreaseAllowance(lockonVesting, _claimAmount - currentAllowance);
+        }
         // Transfer the reward tokens from the validator to the recipient
         ILockonVesting(lockonVesting).deposit(msg.sender, _claimAmount, INDEX_STAKING_VESTING_CATEGORY_ID);
 
@@ -680,9 +686,9 @@ contract IndexStaking is
         for (uint256 i; i < currentNumOfPools;) {
             PoolInfo storage poolInfo = tokenPoolInfo[_stakeTokens[i]];
             require(poolInfo.stakeToken != IERC20(address(0)), "Index Staking: Pool not exist");
-            updatePool(address(poolInfo.stakeToken));
+            _updatePool(address(poolInfo.stakeToken));
             unchecked {
-                i++;
+                ++i;
             }
         }
         currentRewardAmount -= _reductionAmount;
@@ -746,7 +752,7 @@ contract IndexStaking is
         require(_bonusRatePerSecond != 0, "Index Staking: Bonus rate per second must be greater than 0");
         PoolInfo storage pool = tokenPoolInfo[_stakeToken];
         require(pool.stakeToken != IERC20(address(0)), "Index Staking: Pool do not exist");
-        updatePool(_stakeToken);
+        _updatePool(_stakeToken);
         pool.bonusRatePerSecond = _bonusRatePerSecond;
         emit BonusRatePerSecondUpdated(
             msg.sender,

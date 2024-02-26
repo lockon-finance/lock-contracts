@@ -18,11 +18,19 @@ contract LockToken is Initializable, OwnableUpgradeable, ERC20Upgradeable, UUPSU
     /**
      * @dev Maximum supply of Lock Token
      */
-    uint256 public constant MAX_SUPPLY = 10_000_000_000;
+    uint256 private constant MAX_SUPPLY = 10_000_000_000;
     /**
      * @dev Represents the scaling factor used in calculations
      */
-    uint256 public constant BASE_DENOMINATOR = 10_000;
+    uint256 private constant BASE_DENOMINATOR = 10_000;
+    /**
+     * @dev LOCK token allocation percentage to the owner
+     */
+    uint256 private constant OWNER_ALLOCATION_PERCENTAGE = 4000;
+    /**
+     * @dev LOCK token allocation percentage to the management
+     */
+    uint256 private constant MANAGEMENT_ALLOCATION_PERCENTAGE = 6000;
 
     /* ============ State Variables ============ */
 
@@ -48,16 +56,17 @@ contract LockToken is Initializable, OwnableUpgradeable, ERC20Upgradeable, UUPSU
         external
         initializer
     {
+        require(ownerAddress != address(0), "LockToken: ownerAddress is the zero address");
+        require(managementAddress != address(0), "LockToken: managementAddress is the zero address");
         // Initialize the ERC20 token with the provided name and symbol
         __ERC20_init_unchained(name, symbol);
         // Initialize the contract's owner
         __Ownable_init_unchained(ownerAddress);
         __UUPSUpgradeable_init();
         // Calculate the amount of tokens to mint to the owner (40% of MAX_SUPPLY)
-        uint256 amountMintToOwner = (MAX_SUPPLY * 4000) / BASE_DENOMINATOR;
+        uint256 amountMintToOwner = (MAX_SUPPLY * OWNER_ALLOCATION_PERCENTAGE) / BASE_DENOMINATOR;
         // Calculate the amount of tokens to mint to the management (60% of MAX_SUPPLY)
-        uint256 amountMintToManagement = (MAX_SUPPLY * 6000) / BASE_DENOMINATOR;
-
+        uint256 amountMintToManagement = (MAX_SUPPLY * MANAGEMENT_ALLOCATION_PERCENTAGE) / BASE_DENOMINATOR;
         // Mint tokens to the owner and management according to the calculated amounts
         _mint(ownerAddress, amountMintToOwner * (10 ** uint256(decimals())));
         _mint(managementAddress, amountMintToManagement * (10 ** uint256(decimals())));

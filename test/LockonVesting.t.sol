@@ -38,6 +38,20 @@ contract LockonVestingTest is Test {
         lockonVesting = LockonVesting(address(lockonVestingProxy));
     }
 
+    function test_initialize_fail_owner_zero_address() public {
+        vm.expectRevert("LOCKON Vesting: owner is the zero address");
+        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (address(0), address(lockToken)));
+        lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
+        lockonVesting = LockonVesting(address(lockonVestingProxy));
+    }
+
+    function test_initialize_fail_lock_token_zero_address() public {
+        vm.expectRevert("LOCKON Vesting: lockToken is the zero address");
+        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (OWNER, address(0)));
+        lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
+        lockonVesting = LockonVesting(address(lockonVestingProxy));
+    }
+
     function deposit(address user, uint256 _amount, uint256 categoryId) public {
         lockToken.approve(address(lockonVesting), _amount);
         lockonVesting.deposit(user, _amount, categoryId);

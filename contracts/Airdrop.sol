@@ -29,7 +29,11 @@ contract Airdrop is
     /**
      * @dev Represents the category AIRDROP in the LOCKON vesting
      */
-    uint256 public constant AIRDROP_VESTING_CATEGORY_ID = 2;
+    uint256 private constant AIRDROP_VESTING_CATEGORY_ID = 2;
+    /**
+     * @dev Maximum number of distributions allowed
+     */
+    uint256 private constant MAX_DISTRIBUTION_COUNT = 1300;
 
     /* ============ State Variables ============ */
     /**
@@ -159,6 +163,9 @@ contract Airdrop is
         external
         initializer
     {
+        require(_owner != address(0), "Airdrop: owner is the zero address");
+        require(_lockonVesting != address(0), "Airdrop: lockonVesting is the zero address");
+        require(_lockToken != address(0), "Airdrop: lockToken is the zero address");
         // Initialize the contract and set the owner
         // This function should be called only once during deployment
         __Ownable_init_unchained(_owner);
@@ -185,6 +192,7 @@ contract Airdrop is
         onlyDistributeGrantedOrOwner
     {
         uint256 listUserLen = _listUserAddress.length;
+        require(listUserLen <= MAX_DISTRIBUTION_COUNT, "Airdrop: Too many addresses");
         require(
             _amounts.length == listUserLen, "Airdrop: The list for user address and amount value must have equal length"
         );
@@ -195,7 +203,7 @@ contract Airdrop is
             userPendingReward[_listUserAddress[i]] += _amounts[i];
             totalAmount += _amounts[i];
             unchecked {
-                i++;
+                ++i;
             }
         }
         totalPendingAirdropAmount += totalAmount;
@@ -212,7 +220,10 @@ contract Airdrop is
         userPendingReward[msg.sender] = 0;
         totalPendingAirdropAmount -= userAmount;
         // Approve the LOCKON vesting contract to spend the cumulative reward token
-        lockToken.approve(lockonVesting, userAmount);
+        uint256 currentAllowance = lockToken.allowance(address(this), lockonVesting);
+        if (currentAllowance < userAmount) {
+            lockToken.safeIncreaseAllowance(lockonVesting, userAmount - currentAllowance);
+        }
         ILockonVesting(lockonVesting).deposit(msg.sender, userAmount, AIRDROP_VESTING_CATEGORY_ID);
         emit ClaimAirdropReward(msg.sender, userAmount);
     }

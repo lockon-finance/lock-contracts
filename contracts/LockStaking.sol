@@ -65,11 +65,11 @@ contract LockStaking is
     /**
      * @dev Represents the scaling factor used in calculations
      */
-    uint256 public constant PRECISION = 1e12;
+    uint256 private constant PRECISION = 1e12;
     /**
      * @dev Represents the category LOCK STAKING in the LOCKON vesting
      */
-    uint256 public constant LOCK_STAKING_VESTING_CATEGORY_ID = 0;
+    uint256 private constant LOCK_STAKING_VESTING_CATEGORY_ID = 0;
 
     /* ============ State Variables ============ */
     /**
@@ -366,6 +366,11 @@ contract LockStaking is
         uint256 _basicRateDivider,
         uint256 _bonusRatePerSecond
     ) external initializer {
+        require(_owner != address(0), "LOCK Staking: owner is the zero address");
+        require(_validator != address(0), "LOCK Staking: validator is the zero address");
+        require(_lockonVesting != address(0), "LOCK Staking: lockonVesting is the zero address");
+        require(_feeReceiver != address(0), "LOCK Staking: feeReceiver is the zero address");
+        require(_lockToken != address(0), "LOCK Staking: lockToken is the zero address");
         require(_bonusRatePerSecond != 0, "LOCK Staking: Bonus rate per second must be greater than 0");
         // Initialize the contract and set the owner
         // This function should be called only once during deployment
@@ -474,11 +479,11 @@ contract LockStaking is
     /**
      * @dev Updates the pool by calculating and distributing rewards to stakers based on the difference in block
      * timestamps between the last reward calculation and the current block. The function adjusts the reward rate
-     * per LOCK score and ensures that the reward distribution does not exceed the available reward supply.
+     * per LOCK score.
      * The function also updates the last reward block and deducts the distributed rewards from the current reward
      * amount.
      */
-    function updatePool() public {
+    function _updatePool() private {
         if (block.timestamp <= startTimestamp) {
             return;
         }
@@ -486,12 +491,11 @@ contract LockStaking is
             lastRewardTimestamp = block.timestamp;
             return;
         }
-        uint256 rewardSupply = lockToken.balanceOf(address(this));
         // Calculate the reward multiplier based on the difference in block timestamps
         uint256 lockReward = getRewardMultiplier(lastRewardTimestamp, block.timestamp);
-        // Ensure that the reward supply is sufficient for the calculated rewards
-        require(rewardSupply >= lockReward, "LOCK Staking: Reward distributed exceed supply");
-
+        if (lockReward == 0) {
+            return;
+        }
         // Update state data
         rewardPerScore = rewardPerScore + ((lockReward * PRECISION) / totalLockScore);
         currentRewardAmount = currentRewardAmount - lockReward;
@@ -513,7 +517,7 @@ contract LockStaking is
         require(_lockDuration >= minimumLockDuration, "LOCK Staking: Minimum lock duration does not meet");
         require(now_ >= startTimestamp, "LOCK Staking: Staking not start");
 
-        updatePool();
+        _updatePool();
 
         UserInfo storage _currentUserInfo = userInfo[msg.sender];
 
@@ -572,7 +576,7 @@ contract LockStaking is
         UserInfo storage _currentUserInfo = userInfo[msg.sender];
         require(_currentUserInfo.lockedAmount != 0, "LOCK Staking: Nothing to extend");
         require(_lockDuration >= minimumLockDuration, "LOCK Staking: Minimum lock duration does not meet");
-        updatePool();
+        _updatePool();
 
         // Calculate previous reward amount
         uint256 pending = ((_currentUserInfo.lockScore * rewardPerScore) / PRECISION) - _currentUserInfo.rewardDebt;
@@ -619,7 +623,7 @@ contract LockStaking is
         require(_amount != 0, "LOCK Staking: Withdraw amount must be greater than 0");
         require(_currentUserInfo.lockedAmount >= _amount, "LOCK Staking: Withdraw amount exceed available");
 
-        updatePool();
+        _updatePool();
 
         // Calculate previous reward amount
         uint256 pending = ((_currentUserInfo.lockScore * rewardPerScore) / PRECISION) - _currentUserInfo.rewardDebt;
@@ -680,13 +684,16 @@ contract LockStaking is
             getSignerForRequest(_requestId, msg.sender, _commissionSharingReward, _signature) == validatorAddress,
             "LOCK Staking: Invalid signature"
         );
-        updatePool();
+        _updatePool();
         uint256 lockStakingReward = _currentUserInfo.cumulativePendingReward
             + ((_currentUserInfo.lockScore * rewardPerScore) / PRECISION) - _currentUserInfo.rewardDebt;
         uint256 totalCumulativeReward = lockStakingReward + _commissionSharingReward;
         if (totalCumulativeReward != 0) {
             // Approve the LOCKON vesting contract to spend the cumulative reward token
-            lockToken.approve(lockonVesting, totalCumulativeReward);
+            uint256 currentAllowance = lockToken.allowance(address(this), lockonVesting);
+            if (currentAllowance < totalCumulativeReward) {
+                lockToken.safeIncreaseAllowance(lockonVesting, totalCumulativeReward - currentAllowance);
+            }
             ILockonVesting(lockonVesting).deposit(msg.sender, totalCumulativeReward, LOCK_STAKING_VESTING_CATEGORY_ID);
             _currentUserInfo.cumulativePendingReward = 0;
         }
@@ -780,7 +787,7 @@ contract LockStaking is
      * @param _basicRateDivider The new value for the basic rate divider
      */
     function setBasicRateDivider(uint256 _basicRateDivider) external onlyOwner {
-        updatePool();
+        _updatePool();
         basicRateDivider = _basicRateDivider;
         emit BasicRateDividerUpdated(
             msg.sender, basicRateDivider, currentRewardAmount, rewardPerScore, lastRewardTimestamp, block.timestamp
@@ -794,7 +801,7 @@ contract LockStaking is
      */
     function setBonusRatePerSecond(uint256 _bonusRatePerSecond) external onlyOwner {
         require(_bonusRatePerSecond != 0, "LOCK Staking: Bonus rate per second must be greater than 0");
-        updatePool();
+        _updatePool();
         bonusRatePerSecond = _bonusRatePerSecond;
         emit BonusRatePerSecondUpdated(
             msg.sender, bonusRatePerSecond, currentRewardAmount, rewardPerScore, lastRewardTimestamp, block.timestamp

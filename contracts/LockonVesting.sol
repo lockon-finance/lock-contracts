@@ -172,6 +172,8 @@ contract LockonVesting is
      * @param _lockToken  Address of the ERC20 LOCK Token
      */
     function initialize(address _owner, address _lockToken) external initializer {
+        require(_owner != address(0), "LOCKON Vesting: owner is the zero address");
+        require(_lockToken != address(0), "LOCKON Vesting: lockToken is the zero address");
         // Initialize Ownable lib and set the owner
         __Ownable_init_unchained(_owner);
         __UUPSUpgradeable_init();
@@ -371,7 +373,7 @@ contract LockonVesting is
         for (uint256 i; i < listIdLen;) {
             vestingCategories[_vestingCategoryIds[i]] = _vestingCategoryValues[i];
             unchecked {
-                i++;
+                ++i;
             }
         }
     }

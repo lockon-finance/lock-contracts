@@ -6,7 +6,6 @@ import {LockToken} from "../contracts/LockToken.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {LockonVesting} from "../contracts/LockonVesting.sol";
 import {Airdrop} from "../contracts/Airdrop.sol";
-import {MerkleAirdrop} from "../contracts/MerkleAirdrop.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -32,14 +31,6 @@ contract MockAirdrop is Airdrop {
     }
 }
 
-contract MockMerkleAirdrop is MerkleAirdrop {
-    uint256 public counter;
-
-    function setup() public {
-        counter = 10;
-    }
-}
-
 contract UpgradeProxyAirdropTest is Test {
     address tokenProxy;
     address vestingProxy;
@@ -55,7 +46,6 @@ contract UpgradeProxyAirdropTest is Test {
         LockToken token = new LockToken();
         LockonVesting lockonVesting = new LockonVesting();
         Airdrop airdrop = new Airdrop();
-        MerkleAirdrop merkleAirdrop = new MerkleAirdrop();
         // return data in bytes for calling initialization on each contract
         bytes memory tokenData = abi.encodeCall(token.initialize, ("LockToken", "LOCK", OWNER, validator));
 
@@ -71,17 +61,6 @@ contract UpgradeProxyAirdropTest is Test {
         bytes memory airdropData =
             abi.encodeCall(airdrop.initialize, (OWNER, address(lockonVesting), address(token), 0));
         airdropProxy = address(new ERC1967Proxy(address(airdrop), airdropData));
-        bytes memory merkleAirdropData = abi.encodeCall(
-            merkleAirdrop.initialize,
-            (
-                OWNER,
-                address(lockonVesting),
-                address(token),
-                0x94d7b8d37a07dc816d7d72922a0eb0d8d38caf144cc3e37c176cfbdb15aeb34a,
-                100000
-            )
-        );
-        merkleAirdropProxy = address(new ERC1967Proxy(address(merkleAirdrop), merkleAirdropData));
         vm.stopPrank();
     }
 
@@ -91,13 +70,5 @@ contract UpgradeProxyAirdropTest is Test {
         bytes memory data = abi.encodeCall(mock.setup, ());
         UUPSUpgradeable(airdropProxy).upgradeToAndCall(address(mock), data);
         assertEq(MockAirdrop(payable(airdropProxy)).counter(), 10);
-    }
-
-    function test_upgrade_merkle_airdrop() public {
-        vm.startPrank(OWNER);
-        MockMerkleAirdrop mock = new MockMerkleAirdrop();
-        bytes memory data = abi.encodeCall(mock.setup, ());
-        UUPSUpgradeable(merkleAirdropProxy).upgradeToAndCall(address(mock), data);
-        assertEq(MockMerkleAirdrop(payable(merkleAirdropProxy)).counter(), 10);
     }
 }
