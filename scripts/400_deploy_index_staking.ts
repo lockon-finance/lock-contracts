@@ -1,6 +1,6 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import {getContracts, getEnvParams, saveContract, getDefenderUpgradeApprovalOwnerAddress} from "./utils/deploy-helper";
+import { getContracts, getEnvParams, saveContract, getDefenderUpgradeApprovalOwnerAddress } from "./utils/deploy-helper";
 
 async function main() {
   const envParams = getEnvParams();
@@ -12,7 +12,8 @@ async function main() {
   const IndexStaking = await ethers.getContractFactory("IndexStaking");
   const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
   const startTimestamp = Math.floor(Date.now() / 1000);
-  const bonusRatePerSecond = 2300 // (decimals=1e12)
+  const bonusRatePerSecond = 2300; // (decimals=1e12)
+  const vestingCategoryIds = [3, 4];
   const indexStaking = await defender.deployProxy(IndexStaking, [
     ownerAddress,
     envParams.operatorAddress,
@@ -21,8 +22,9 @@ async function main() {
     BigInt(2 * 10 ** 9) * BigInt(10 ** 18), // Number of lock tokens to use as index staking reward
     "INDEX_STAKING",
     "1",
-    // Initial pool info (Index token address, bonusRatePerSecond, startTimestamp)
-    envParams.initialIndexTokenAddresses.map(address => [address, bonusRatePerSecond, startTimestamp]),
+    // Initial pool info (Index token address, bonusRatePerSecond, startTimestamp, vestingCategoryId)
+    envParams.initialIndexTokenAddresses.map((address, index) =>
+      [address, bonusRatePerSecond, startTimestamp, vestingCategoryIds[index]]),
   ], { initializer: "initialize", kind: "uups" });
 
   await indexStaking.waitForDeployment();

@@ -103,6 +103,8 @@ contract LockonVestingTest is Test {
         lockonVesting.removeBlacklistUser(ACCOUNT_TWO);
         vm.expectRevert("LOCKON Vesting: Vesting amount must be greater than 0");
         lockonVesting.deposit(ACCOUNT_TWO, 0, 0);
+        vm.expectRevert("LOCKON Vesting: Category do not exist");
+        lockonVesting.deposit(ACCOUNT_TWO, vestingAmount, 5);
     }
 
     function test__vesting_view_function() public {
@@ -112,9 +114,9 @@ contract LockonVestingTest is Test {
         assertEq(lockonVesting.currentTotalClaimable(ACCOUNT_ONE, 0), 0);
         deposit(ACCOUNT_ONE, vestingAmount, 0);
         skip(370 days); // Skip 370 days
-        deposit(ACCOUNT_ONE, vestingAmount, 1);
-        (,,,, uint256 startTime,) = lockonVesting.userVestingWallet(ACCOUNT_ONE, 1);
-        assertEq(lockonVesting.getVestingEndTime(ACCOUNT_ONE, 1), startTime + lockonVesting.vestingCategories(0));
+        deposit(ACCOUNT_ONE, vestingAmount, 2);
+        (,,,, uint256 startTime,) = lockonVesting.userVestingWallet(ACCOUNT_ONE, 2);
+        assertEq(lockonVesting.getVestingEndTime(ACCOUNT_ONE, 2), startTime + lockonVesting.vestingCategories(2));
     }
 
     function test__vesting_claim_vesting() public {
@@ -340,7 +342,7 @@ contract LockonVestingTest is Test {
         vestingCategoryValues[1] = 200 days;
         lockonVesting.setVestingCategories(vestingCategoryIds, vestingCategoryValues);
         assertEq(lockonVesting.vestingCategories(0), 100 days);
-        assertEq(lockonVesting.vestingCategories(1), 300 days); // no change in data
+        assertEq(lockonVesting.vestingCategories(1), 0); // no change in data
         assertEq(lockonVesting.vestingCategories(2), 200 days);
     }
 

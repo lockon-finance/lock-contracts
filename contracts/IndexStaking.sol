@@ -35,10 +35,6 @@ contract IndexStaking is
      * @dev Represents the scaling factor used in calculations
      */
     uint256 private constant PRECISION = 1e12;
-    /**
-     * @dev Represents the category INDEX STAKING in the LOCKON vesting
-     */
-    uint256 private constant INDEX_STAKING_VESTING_CATEGORY_ID = 1;
 
     /* ============ Struct ============ */
 
@@ -64,6 +60,7 @@ contract IndexStaking is
         IERC20 stakeToken; // The ERC20 token used for staking
         uint256 bonusRatePerSecond; // Bonus rate per second combine with current reward amount to get back reward token per second
         uint256 startTimestamp; // The timestamp at which staking in the pool starts
+        uint256 vestingCategoryId; // Represents the category of each stake token in the LOCKON vesting
     }
 
     // Information about user's claim request
@@ -96,6 +93,10 @@ contract IndexStaking is
      * @dev Track the status of each requestId
      */
     mapping(string => bool) public isRequestIdProcessed;
+    /**
+     * @dev Track category id of each stake token address
+     */
+    mapping(address stakeToken => uint256 categoryId) public stakeTokenToVestingCategoryId;
 
     /**
      * @dev Address of the validator
@@ -153,6 +154,7 @@ contract IndexStaking is
      * @param stakeToken Address of the staked token in the pool
      * @param bonusRatePerSecond Bonus rate per second combine with current reward amount to get back reward token per second
      * @param currentNumOfPools Current total number of pools in index staking
+     * @param vestingCategoryId Category id for LOCKON Vesting
      * @param startTimestamp Timestamp at which the staking pool starts
      */
     event PoolAdded(
@@ -160,6 +162,7 @@ contract IndexStaking is
         address stakeToken,
         uint256 bonusRatePerSecond,
         uint256 currentNumOfPools,
+        uint256 vestingCategoryId,
         uint256 startTimestamp
     );
 
@@ -369,8 +372,10 @@ contract IndexStaking is
             require(
                 pools[i].bonusRatePerSecond != 0, "Index Staking: Pool bonus rate per second must be greater than 0"
             );
+            require(pools[i].vestingCategoryId != 0, "Index Staking: Vesting category id must be greater than 0");
             tokenPoolInfo[address(stakeToken)] =
                 PoolInfo(stakeToken, 0, 0, pools[i].bonusRatePerSecond, block.timestamp, pools[i].startTimestamp);
+            stakeTokenToVestingCategoryId[address(stakeToken)] = pools[i].vestingCategoryId;
             unchecked {
                 ++i;
             }
@@ -459,21 +464,32 @@ contract IndexStaking is
      * @param _stakeToken The address of the ERC-20 token that represents the staking asset in the new pool
      * @param _bonusRatePerSecond Bonus rate per second
      * @param _startTimestamp The starting timestamp from which users can begin staking in this new pool
+     * @param _vestingCategoryId Category id for LOCKON Vesting
      */
-    function addStakingPool(address _stakeToken, uint256 _bonusRatePerSecond, uint256 _startTimestamp)
-        external
-        onlyOwner
-        whenNotPaused
-    {
+    function addStakingPool(
+        address _stakeToken,
+        uint256 _bonusRatePerSecond,
+        uint256 _startTimestamp,
+        uint256 _vestingCategoryId
+    ) external onlyOwner whenNotPaused {
         require(_stakeToken != address(0), "Index Staking: Zero address not allowed");
         require(_bonusRatePerSecond != 0, "Index Staking: Pool bonus rate per second must be greater than 0");
+        require(_vestingCategoryId != 0, "Index Staking: Vesting category id must be greater than 0");
         require(tokenPoolInfo[_stakeToken].stakeToken == IERC20(address(0)), "Index Staking: Pool already exist");
 
         // Add a new pool with the specified ERC-20 token and starting timestamp
         tokenPoolInfo[_stakeToken] =
             PoolInfo(IERC20(_stakeToken), 0, 0, _bonusRatePerSecond, _startTimestamp, _startTimestamp);
         currentNumOfPools += 1;
-        emit PoolAdded(msg.sender, _stakeToken, _bonusRatePerSecond, currentNumOfPools, _startTimestamp);
+        stakeTokenToVestingCategoryId[_stakeToken] = _vestingCategoryId;
+        emit PoolAdded(
+            msg.sender,
+            _stakeToken,
+            _bonusRatePerSecond,
+            currentNumOfPools,
+            stakeTokenToVestingCategoryId[_stakeToken],
+            _startTimestamp
+        );
     }
 
     /**
@@ -570,6 +586,7 @@ contract IndexStaking is
         // Get pool & user information
         PoolInfo storage pool = tokenPoolInfo[_stakeToken];
         UserInfo storage user = userInfo[msg.sender][_stakeToken];
+        require(pool.stakeToken != IERC20(address(0)), "Index Staking: Pool do not exist");
         require(user.lastStakedTimestamp != 0, "Index Staking: User hasn't staked any token yet");
         require(!isRequestIdProcessed[_requestId], "Index Staking: Request already processed");
         require(currentRewardAmount >= _claimAmount, "Index Staking: Claim amount exceed remaining reward");
@@ -591,7 +608,7 @@ contract IndexStaking is
             lockToken.safeIncreaseAllowance(lockonVesting, _claimAmount - currentAllowance);
         }
         // Transfer the reward tokens from the validator to the recipient
-        ILockonVesting(lockonVesting).deposit(msg.sender, _claimAmount, INDEX_STAKING_VESTING_CATEGORY_ID);
+        ILockonVesting(lockonVesting).deposit(msg.sender, _claimAmount, stakeTokenToVestingCategoryId[_stakeToken]);
 
         emit IndexStakingRewardClaimed(
             msg.sender, _requestId, _stakeToken, _claimAmount, user.rewardDebt, user.cumulativePendingReward

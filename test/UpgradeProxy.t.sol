@@ -102,9 +102,9 @@ contract UpgradeProxyTest is Test {
         vestingProxy = address(new ERC1967Proxy(address(lockonVesting), lockonVestingData));
         // initiate pools and token for index staking contract
         IndexStaking.InitPoolInfo memory firstPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.number);
+            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.number, 3);
         IndexStaking.InitPoolInfo memory secondPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300, block.number);
+            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300, block.number, 4);
         lpiToken = new MockERC20Token("Lockon Passive Index", "LPI");
         lbiToken = new MockERC20Token("Lockon Balance Index", "LBI");
         IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);

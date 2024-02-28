@@ -72,9 +72,9 @@ contract IndexStakingTest is Test {
 
     function initializeAndConfig() public {
         IndexStaking.InitPoolInfo memory firstPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.timestamp);
+            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.timestamp, 3);
         IndexStaking.InitPoolInfo memory secondPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300, block.timestamp);
+            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300, block.timestamp, 4);
         IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
         poolInfos[0] = firstPoolInfo;
         poolInfos[1] = secondPoolInfo;
@@ -109,10 +109,10 @@ contract IndexStakingTest is Test {
 
     function test_initialize_fail_zero_address() public {
         IndexStaking.InitPoolInfo memory firstPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(0)), 2300, block.timestamp);
+            IndexStaking.InitPoolInfo(IERC20(address(0)), 2300, block.timestamp, 3);
         IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
         poolInfos[0] = firstPoolInfo;
-        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp);
+        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp, 4);
         vm.expectRevert("Index Staking: Zero address not allowed");
         bytes memory indexStakingData = abi.encodeCall(
             indexStaking.initialize,
@@ -133,10 +133,10 @@ contract IndexStakingTest is Test {
 
     function test_initialize_fail_owner_zero_address() public {
         IndexStaking.InitPoolInfo memory firstPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2300, block.timestamp);
+            IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2300, block.timestamp, 3);
         IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
         poolInfos[0] = firstPoolInfo;
-        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp);
+        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp, 4);
         vm.expectRevert("Index Staking: owner is the zero address");
         bytes memory indexStakingData = abi.encodeCall(
             indexStaking.initialize,
@@ -157,10 +157,10 @@ contract IndexStakingTest is Test {
 
     function test_initialize_fail_validator_zero_address() public {
         IndexStaking.InitPoolInfo memory firstPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2300, block.timestamp);
+            IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2300, block.timestamp, 3);
         IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
         poolInfos[0] = firstPoolInfo;
-        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp);
+        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp, 4);
         vm.expectRevert("Index Staking: validator is the zero address");
         bytes memory indexStakingData = abi.encodeCall(
             indexStaking.initialize,
@@ -181,10 +181,10 @@ contract IndexStakingTest is Test {
 
     function test_initialize_fail_lockon_vesting_zero_address() public {
         IndexStaking.InitPoolInfo memory firstPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2300, block.timestamp);
+            IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2300, block.timestamp, 3);
         IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
         poolInfos[0] = firstPoolInfo;
-        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp);
+        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp, 4);
         vm.expectRevert("Index Staking: lockonVesting is the zero address");
         bytes memory indexStakingData = abi.encodeCall(
             indexStaking.initialize,
@@ -196,10 +196,10 @@ contract IndexStakingTest is Test {
 
     function test_initialize_fail_lock_token_zero_address() public {
         IndexStaking.InitPoolInfo memory firstPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2300, block.timestamp);
+            IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2300, block.timestamp, 3);
         IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
         poolInfos[0] = firstPoolInfo;
-        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp);
+        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp, 4);
         vm.expectRevert("Index Staking: lockToken is the zero address");
         bytes memory indexStakingData = abi.encodeCall(
             indexStaking.initialize,
@@ -211,9 +211,31 @@ contract IndexStakingTest is Test {
 
     function test_initialize_fail_pool_bonus_rate() public {
         IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
-        poolInfos[0] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_THREE), 0, block.timestamp);
-        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp);
+        poolInfos[0] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_THREE), 0, block.timestamp, 3);
+        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp, 4);
         vm.expectRevert("Index Staking: Pool bonus rate per second must be greater than 0");
+        bytes memory indexStakingData = abi.encodeCall(
+            indexStaking.initialize,
+            (
+                OWNER,
+                validator,
+                address(lockonVesting),
+                address(lockToken),
+                100000 ether,
+                "INDEX_STAKING",
+                "1",
+                poolInfos
+            )
+        );
+        indexStakingProxy = new ERC1967Proxy(address(indexStaking), indexStakingData);
+        indexStaking = IndexStaking(address(indexStakingProxy));
+    }
+
+    function test_initialize_fail_vesting_category_id() public {
+        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
+        poolInfos[0] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_THREE), 2200, block.timestamp, 0);
+        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2300, block.timestamp, 4);
+        vm.expectRevert("Index Staking: Vesting category id must be greater than 0");
         bytes memory indexStakingData = abi.encodeCall(
             indexStaking.initialize,
             (
@@ -237,12 +259,17 @@ contract IndexStakingTest is Test {
         vm.startPrank(OWNER);
         MockERC20Token erc20Token = new MockERC20Token("ERC20 Token", "ERC20");
         vm.recordLogs();
-        indexStaking.addStakingPool(address(erc20Token), 2300, block.timestamp);
+        indexStaking.addStakingPool(address(erc20Token), 2300, block.timestamp, 5);
         assertEq(indexStaking.currentNumOfPools(), 3);
+        assertEq(indexStaking.stakeTokenToVestingCategoryId(address(erc20Token)), 5);
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        assertEq(entries[0].topics[0], keccak256("PoolAdded(address,address,uint256,uint256,uint256)"));
+        assertEq(entries[0].topics[0], keccak256("PoolAdded(address,address,uint256,uint256,uint256,uint256)"));
         (address token,) = abi.decode(entries[0].data, (address, uint256));
         assertEq(token, address(erc20Token));
+        MockERC20Token newErc20Token = new MockERC20Token("ERC20 Tokenn", "ERC20");
+        indexStaking.addStakingPool(address(newErc20Token), 2300, block.timestamp, 6);
+        assertEq(indexStaking.currentNumOfPools(), 4);
+        assertEq(indexStaking.stakeTokenToVestingCategoryId(address(newErc20Token)), 6);
     }
 
     function test_add_pool_fail() public {
@@ -250,19 +277,23 @@ contract IndexStakingTest is Test {
         // Check for OWNER role
         vm.expectRevert(abi.encodeWithSelector(OwnableUnauthorizedAccount.selector, ACCOUNT_ONE));
         vm.prank(ACCOUNT_ONE);
-        indexStaking.addStakingPool(address(lbiToken), 2300, block.timestamp);
+        indexStaking.addStakingPool(address(lbiToken), 2300, block.timestamp, 5);
         // Zero address is forbidden
         vm.expectRevert("Index Staking: Zero address not allowed");
         vm.prank(OWNER);
-        indexStaking.addStakingPool(address(0), 2300, block.timestamp);
+        indexStaking.addStakingPool(address(0), 2300, block.timestamp, 5);
         // Pool bonus rate per second must larger than 0
         vm.expectRevert("Index Staking: Pool bonus rate per second must be greater than 0");
         vm.prank(OWNER);
-        indexStaking.addStakingPool(ACCOUNT_THREE, 0, block.timestamp);
+        indexStaking.addStakingPool(ACCOUNT_THREE, 0, block.timestamp, 5);
         // Pool already exist
         vm.expectRevert("Index Staking: Pool already exist");
         vm.prank(OWNER);
-        indexStaking.addStakingPool(address(lbiToken), 2300, block.timestamp);
+        indexStaking.addStakingPool(address(lbiToken), 2300, block.timestamp, 5);
+        // Vesting category id must be greater than 0
+        vm.expectRevert("Index Staking: Vesting category id must be greater than 0");
+        vm.prank(OWNER);
+        indexStaking.addStakingPool(address(ACCOUNT_THREE), 2300, block.timestamp, 0);
     }
 
     function test_deposit() public {
@@ -336,7 +367,7 @@ contract IndexStakingTest is Test {
         // Create new token and add new pool with latency staking start time
         vm.startPrank(OWNER);
         MockERC20Token erc20Token = new MockERC20Token("ERC20 Token", "ERC20");
-        indexStaking.addStakingPool(address(erc20Token), 2300, block.timestamp + 1 minutes);
+        indexStaking.addStakingPool(address(erc20Token), 2300, block.timestamp + 1 minutes, 3);
         vm.stopPrank();
         // Using account one
         vm.startPrank(ACCOUNT_ONE);
@@ -532,7 +563,10 @@ contract IndexStakingTest is Test {
         indexStaking.claimIndexStakingReward(
             requestId, address(lbiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signatureWithValidAmount
         );
-
+        vm.expectRevert("Index Staking: Pool do not exist");
+        indexStaking.claimIndexStakingReward(
+            requestId, address(0), CUMULATIVE_PENDING_REWARD, claimAmount, signatureWithValidAmount
+        );
         lpiToken.approve(address(indexStaking), stakeAmount * 2);
         indexStaking.deposit(address(lpiToken), stakeAmount);
         skip(10 days);
@@ -787,7 +821,7 @@ contract IndexStakingTest is Test {
         vm.stopPrank();
         vm.startPrank(OWNER);
         MockERC20Token erc20Token = new MockERC20Token("ERC20 Token", "ERC20");
-        indexStaking.addStakingPool(address(erc20Token), 2300, block.timestamp + 1 minutes);
+        indexStaking.addStakingPool(address(erc20Token), 2300, block.timestamp + 1 minutes, 5);
         // Pool not exist
         vm.expectRevert("Index Staking: Pool do not exist");
         indexStaking.setBonusRatePerSecond(address(fakeToken), 2990);
@@ -811,9 +845,9 @@ contract IndexStakingTest is Test {
     function test__get_current_reward_per_token() public {
         lockonVesting.addAddressDepositPermission(address(indexStaking));
         IndexStaking.InitPoolInfo memory firstPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.timestamp);
+            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.timestamp, 3);
         IndexStaking.InitPoolInfo memory secondPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300, block.timestamp);
+            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300, block.timestamp, 4);
         IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
         poolInfos[0] = firstPoolInfo;
         poolInfos[1] = secondPoolInfo;

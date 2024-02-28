@@ -181,8 +181,10 @@ contract LockonVesting is
         __ReentrancyGuard_init();
         lockToken = IERC20(_lockToken);
         vestingCategories[0] = 300 days; // index 0 represents category LOCK STAKING
-        vestingCategories[1] = 300 days; // index 1 represents category INDEX STAKING
         vestingCategories[2] = 300 days; // index 2 represents category AIRDROP
+        // index 3,4 represents category for INDEX STAKING stake tokens
+        vestingCategories[3] = 300 days;
+        vestingCategories[4] = 300 days;
     }
 
     /**
@@ -260,6 +262,7 @@ contract LockonVesting is
         require(!isBlacklistUser[user], "LOCKON Vesting: User has been banned from all activities in LOCKON Vesting");
         require(amount != 0, "LOCKON Vesting: Vesting amount must be greater than 0");
         require(user != address(0), "LOCKON Vesting: Zero address not allowed");
+        require(vestingCategories[categoryId] != 0, "LOCKON Vesting: Category do not exist");
 
         VestingWallet storage vestingInfo = userVestingWallet[user][categoryId];
         uint256 claimableAmount = _claimable(user, categoryId);
