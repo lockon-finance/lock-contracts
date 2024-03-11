@@ -42,15 +42,13 @@ contract IndexStaking is
     struct UserInfo {
         uint256 stakedAmount; // The amount staked by the user
         uint256 lastStakedTimestamp; // The timestamp of the last staking action by the user
-        uint256 rewardDebt; // The reward debt
-        uint256 cumulativePendingReward; // Pending reward accumulated each time an user deposit or withdraw
     }
 
     // Information about each staking pool
     struct PoolInfo {
         IERC20 stakeToken; // The ERC20 token used for staking
         uint256 totalStakedAmount; // The total amount of tokens staked in the pool
-        uint256 rewardPerToken; // Accumulated reward per token, times 1e12
+        uint256 lastGeneratedReward; // The amount reward calculated each time an user deposit or withdraw
         uint256 bonusRatePerSecond; // Bonus rate per second combine with current reward amount to get back reward token per second
         uint256 lastRewardTimestamp; // Last block timestamp that reward distribution in pool occurs
         uint256 startTimestamp; // The timestamp at which staking in the pool starts
@@ -68,19 +66,10 @@ contract IndexStaking is
         string requestId; // An ID for the staking reward claim request
         address beneficiary; // The address of the beneficiary of the staking reward
         address stakeToken; // The address of the stake token of the staking pool
-        uint256 cumulativePendingReward; // Pending reward accumulated each time an user deposit or withdraw
         uint256 claimAmount; // The amount of reward tokens to be claimed
     }
 
     /* ============ State Variables ============ */
-    /**
-     * @dev Mapping that keeps track of whether each address is allowed to update current reward amount
-     */
-    mapping(address => bool) public isAllowedUpdate;
-    /**
-     * @dev Mapping that keeps track each user address index in the list allowed update address
-     */
-    mapping(address => uint256) private allowedUpdateOneBasedIndexes;
     /**
      * @dev A mapping to track PoolInfo struct for each stake token address
      */
@@ -102,10 +91,6 @@ contract IndexStaking is
      * @dev Address of the validator
      */
     address public validatorAddress;
-    /**
-     * @dev List address allowed to update the current reward amount of Index staking contract
-     */
-    address[] public listAllowedUpdate;
 
     /**
      * @dev Address of LOCKON vesting contract
@@ -135,15 +120,15 @@ contract IndexStaking is
      *
      * @param sender Address of the function executor
      * @param stakeToken Address of the token user stake
-     * @param rewardPerToken Accumulated reward per token
      * @param currentRewardAmount Current amount of reward used to pay for user staking's reward
+     * @param lastGeneratedReward The amount reward calculated each time an user deposit or withdraw or claim
      * @param lastRewardTimestamp Last block timestamp that reward distribution occurs
      */
     event PoolDataUpdated(
         address indexed sender,
         address stakeToken,
-        uint256 rewardPerToken,
         uint256 currentRewardAmount,
+        uint256 lastGeneratedReward,
         uint256 lastRewardTimestamp
     );
 
@@ -173,20 +158,18 @@ contract IndexStaking is
      * @param stakeToken Identifier of the staking pool
      * @param stakeAmount Amount of tokens deposited into the pool
      * @param currentStakedAmount Amount of tokens user staked into the pool
-     * @param rewardDebt User's accumulated reward debt
-     * @param cumulativePendingReward Pending reward accumulated each time an user deposit or withdraw
      * @param totalStakedAmount The total amount of tokens staked in the pool
-     * @param lastRewardTimestamp Last block timestamp that reward distribution occurs
+     * @param lastStakedTimestamp The timestamp of the last staking action by the user
+     * @param lastGeneratedReward The amount reward calculated each time an user deposit or withdraw
      */
     event DepositSucceeded(
         address indexed sender,
         address stakeToken,
         uint256 stakeAmount,
         uint256 currentStakedAmount,
-        uint256 rewardDebt,
-        uint256 cumulativePendingReward,
         uint256 totalStakedAmount,
-        uint256 lastRewardTimestamp
+        uint256 lastStakedTimestamp,
+        uint256 lastGeneratedReward
     );
 
     /**
@@ -197,8 +180,7 @@ contract IndexStaking is
      * @param withdrawAmount Amount of tokens withdrawn from the pool
      * @param currentStakedAmount Amount of tokens user staked into the pool
      * @param totalStakedAmount The total amount of tokens staked in the pool
-     * @param rewardDebt User's accumulated reward debt
-     * @param cumulativePendingReward Pending reward accumulated each time an user deposit or withdraw
+     * @param lastGeneratedReward The amount reward calculated each time an user deposit or withdraw
      */
     event WithdrawSucceeded(
         address indexed sender,
@@ -206,8 +188,7 @@ contract IndexStaking is
         uint256 withdrawAmount,
         uint256 currentStakedAmount,
         uint256 totalStakedAmount,
-        uint256 rewardDebt,
-        uint256 cumulativePendingReward
+        uint256 lastGeneratedReward
     );
 
     /**
@@ -217,16 +198,10 @@ contract IndexStaking is
      * @param requestId Identifier for the staking reward claim
      * @param stakeToken Identifier of the staking pool from which the reward is claimed
      * @param claimedAmount Amount of reward tokens claimed
-     * @param rewardDebt User's accumulated reward debt
-     * @param cumulativePendingReward Pending reward accumulated each time an user deposit or withdraw
+     * @param lastGeneratedReward The amount reward calculated each time an user deposit or withdraw
      */
     event IndexStakingRewardClaimed(
-        address indexed sender,
-        string requestId,
-        address stakeToken,
-        uint256 claimedAmount,
-        uint256 rewardDebt,
-        uint256 cumulativePendingReward
+        address indexed sender, string requestId, address stakeToken, uint256 claimedAmount, uint256 lastGeneratedReward
     );
 
     /**
@@ -257,34 +232,12 @@ contract IndexStaking is
     event ValidatorAddressUpdated(address indexed sender, address validator, uint256 timestamp);
 
     /**
-     * Emitted when a user set new current reward amount
-     *
-     * @param sender Address of the function executor
-     * @param currentRewardAmount New current reward amount
-     * @param timestamp Timestamp at which the currentRewardAmount is updated
-     */
-    event CurrentRewardAmountUpdated(address indexed sender, uint256 currentRewardAmount, uint256 timestamp);
-
-    /**
-     * Emitted when a user set new permissioned address
-     *
-     * @param sender Address of the function executor
-     * @param permissionedAddress New permissioned address
-     * @param timestamp Timestamp at which the address is updated
-     * @param isPermissionGranted User update permission status
-     */
-    event PermissionedAddressUpdated(
-        address indexed sender, address permissionedAddress, bool isPermissionGranted, uint256 timestamp
-    );
-
-    /**
      * Emitted when the bonus rate per second is updated
      *
      * @param sender Address of the function executor
      * @param stakeToken Token address user stake
      * @param bonusRatePerSecond New value for bonus rate per second
      * @param currentRewardAmount New value for current reward amount
-     * @param rewardPerToken New value for reward per token
      * @param lastRewardTimestamp New value for last reward timestamp
      * @param timestamp Timestamp at which the address is updated
      */
@@ -293,18 +246,9 @@ contract IndexStaking is
         address stakeToken,
         uint256 bonusRatePerSecond,
         uint256 currentRewardAmount,
-        uint256 rewardPerToken,
         uint256 lastRewardTimestamp,
         uint256 timestamp
     );
-
-    /**
-     * @dev Modifier that only owner and address that allowed to update current reward amount can call
-     */
-    modifier onlyAllowedAddressOrOwner() {
-        require(isAllowedUpdate[msg.sender] || msg.sender == owner(), "Index Staking: Forbidden");
-        _;
-    }
 
     /**
      * Emitted when the admin allocates an amount of LOCK tokens to the contract
@@ -395,20 +339,6 @@ contract IndexStaking is
     }
 
     /**
-     * @dev Calculates and returns the current reward per token
-     * @param _stakeToken Stake token address
-     */
-    function getCurrentRewardPerToken(address _stakeToken) external view returns (uint256) {
-        PoolInfo storage poolInfo = tokenPoolInfo[_stakeToken];
-        if (poolInfo.totalStakedAmount == 0) return poolInfo.rewardPerToken;
-        // Calculate the reward multiplier based on the difference in block timestamps
-        uint256 lockReward = getRewardMultiplier(_stakeToken, poolInfo.lastRewardTimestamp, block.timestamp);
-        uint256 rewardPerToken = poolInfo.rewardPerToken;
-        rewardPerToken += (lockReward * PRECISION) / poolInfo.totalStakedAmount;
-        return rewardPerToken;
-    }
-
-    /**
      * @dev Calculates and returns a reward multiplier for a specified time range (`_from` to `_to`)
      * The multiplier is determined by invoking the `rewardTokenPerSecond` function and multiplying it by
      * the time duration between `_from` and `_to`
@@ -425,20 +355,36 @@ contract IndexStaking is
         return currentRewardAmount;
     }
 
-    /* ============ Public Functions ============ */
+    /**
+     * @dev Calculates and return last generated reward based on the difference in block
+     * timestamps between the last reward calculation and the current block.
+     * @param _stakeToken Stake token address
+     */
+    function getLastGeneratedReward(address _stakeToken) public view returns (uint256) {
+        PoolInfo storage poolInfo = tokenPoolInfo[_stakeToken];
+        if (poolInfo.totalStakedAmount != 0) {
+            // Calculate the reward multiplier based on the difference in block timestamps
+            uint256 lockReward = getRewardMultiplier(_stakeToken, poolInfo.lastRewardTimestamp, block.timestamp);
+            return lockReward;
+        }
+        return poolInfo.lastGeneratedReward;
+    }
+
+    /* ============ Private Functions ============ */
 
     /**
      * @dev Updates the pool by calculating and distributing rewards to stakers based on the difference in block
-     * timestamps between the last reward calculation and the current block. The function adjusts the reward rate
-     * per stake token.
+     * timestamps between the last reward calculation and the current block.
      * The function also updates the last reward block and deducts the distributed rewards from the current reward
      * amount.
      * @param _stakeToken Stake token address
      */
-    function _updatePool(address _stakeToken) private {
+    function updatePool(address _stakeToken) public {
+        require(tokenPoolInfo[_stakeToken].stakeToken != IERC20(address(0)), "Index Staking: Pool do not exist");
         PoolInfo storage poolInfo = tokenPoolInfo[_stakeToken];
         if (poolInfo.totalStakedAmount == 0) {
             poolInfo.lastRewardTimestamp = block.timestamp;
+            poolInfo.lastGeneratedReward = 0;
             return;
         }
         // Calculate the reward multiplier based on the difference in block timestamps
@@ -447,12 +393,39 @@ contract IndexStaking is
             return;
         }
         // Update state data
-        poolInfo.rewardPerToken += (lockReward * PRECISION) / poolInfo.totalStakedAmount;
         currentRewardAmount = currentRewardAmount - lockReward;
+        poolInfo.lastGeneratedReward = lockReward;
         poolInfo.lastRewardTimestamp = block.timestamp;
         emit PoolDataUpdated(
-            msg.sender, _stakeToken, poolInfo.rewardPerToken, currentRewardAmount, poolInfo.lastRewardTimestamp
+            msg.sender, _stakeToken, currentRewardAmount, poolInfo.lastGeneratedReward, poolInfo.lastRewardTimestamp
         );
+    }
+
+    /**
+     * @dev Verify the staking reward claim or the cancellation claim request with signature
+     *
+     * @param _claimRequest An ID for the staking reward claim or the cancellation claim
+     * @param _signature The signature to validate the claim
+     */
+    function _verifyClaimRequest(ClaimRequest memory _claimRequest, bytes memory _signature)
+        private
+        view
+        returns (address)
+    {
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    keccak256(
+                        "ClaimRequest(string requestId,address beneficiary,address stakeToken,uint256 claimAmount)"
+                    ),
+                    keccak256(bytes(_claimRequest.requestId)),
+                    _claimRequest.beneficiary,
+                    _claimRequest.stakeToken,
+                    _claimRequest.claimAmount
+                )
+            )
+        );
+        return ECDSA.recover(digest, _signature);
     }
 
     /* ============ External Functions ============ */
@@ -506,14 +479,9 @@ contract IndexStaking is
         require(pool.stakeToken != IERC20(address(0)), "Index Staking: Pool not exist");
         // Ensure that staking is allowed for this pool based on the current block timestamp
         require(block.timestamp >= pool.startTimestamp, "Index Staking: Staking not start");
-        _updatePool(_stakeToken);
-        uint256 pending = (user.stakedAmount * pool.rewardPerToken / PRECISION) - user.rewardDebt;
-        if (pending != 0) {
-            user.cumulativePendingReward += pending;
-        }
+        updatePool(_stakeToken);
         // Update the user's staked amount
         user.stakedAmount += _stakeAmount;
-        user.rewardDebt = (user.stakedAmount * pool.rewardPerToken) / PRECISION;
         // Update the pool's info
         pool.totalStakedAmount += _stakeAmount;
         user.lastStakedTimestamp = block.timestamp;
@@ -524,10 +492,9 @@ contract IndexStaking is
             _stakeToken,
             _stakeAmount,
             user.stakedAmount,
-            user.rewardDebt,
-            user.cumulativePendingReward,
             pool.totalStakedAmount,
-            user.lastStakedTimestamp
+            user.lastStakedTimestamp,
+            pool.lastGeneratedReward
         );
     }
 
@@ -544,14 +511,9 @@ contract IndexStaking is
         UserInfo storage user = userInfo[msg.sender][_stakeToken];
         // Check if the withdrawal amount is less than or equal to the user's staked amount
         require(user.stakedAmount >= _withdrawAmount, "Index Staking: Withdrawal amount exceed stake amount");
-        _updatePool(_stakeToken);
-        uint256 pending = (user.stakedAmount * pool.rewardPerToken / PRECISION) - user.rewardDebt;
-        if (pending != 0) {
-            user.cumulativePendingReward += pending;
-        }
+        updatePool(_stakeToken);
         // Update the user's info
         user.stakedAmount -= _withdrawAmount;
-        user.rewardDebt = (user.stakedAmount * pool.rewardPerToken) / PRECISION;
         // Update the pool's info
         pool.totalStakedAmount -= _withdrawAmount;
         // Transfer the withdrawn tokens from the staking pool to the user's address
@@ -562,8 +524,7 @@ contract IndexStaking is
             _withdrawAmount,
             user.stakedAmount,
             pool.totalStakedAmount,
-            user.rewardDebt,
-            user.cumulativePendingReward
+            pool.lastGeneratedReward
         );
     }
 
@@ -572,14 +533,12 @@ contract IndexStaking is
      *
      * @param _requestId An ID for the staking reward claim
      * @param _stakeToken address of the stake token of the staking pool
-     * @param _cumulativePendingReward Pending reward accumulated each time an user deposit or withdraw
      * @param _claimAmount The amount of reward tokens to be claimed
      * @param _signature The signature to validate the claim
      */
     function claimIndexStakingReward(
         string calldata _requestId,
         address _stakeToken,
-        uint256 _cumulativePendingReward,
         uint256 _claimAmount,
         bytes memory _signature
     ) external whenNotPaused nonReentrant {
@@ -593,15 +552,12 @@ contract IndexStaking is
 
         // Verify the signature to ensure the validity of the distribution
         require(
-            getSignerForRequest(_requestId, msg.sender, _stakeToken, _cumulativePendingReward, _claimAmount, _signature)
-                == validatorAddress,
+            getSignerForRequest(_requestId, msg.sender, _stakeToken, _claimAmount, _signature) == validatorAddress,
             "Index Staking: Invalid signature"
         );
-        _updatePool(_stakeToken);
+        updatePool(_stakeToken);
         // Mark the requestId as processed to prevent duplicate claim
         isRequestIdProcessed[_requestId] = true;
-        user.cumulativePendingReward -= _cumulativePendingReward;
-        user.rewardDebt = (user.stakedAmount * pool.rewardPerToken) / PRECISION;
         // Approve for the contract vesting
         uint256 currentAllowance = lockToken.allowance(address(this), lockonVesting);
         if (currentAllowance < _claimAmount) {
@@ -610,9 +566,7 @@ contract IndexStaking is
         // Transfer the reward tokens from the validator to the recipient
         ILockonVesting(lockonVesting).deposit(msg.sender, _claimAmount, stakeTokenToVestingCategoryId[_stakeToken]);
 
-        emit IndexStakingRewardClaimed(
-            msg.sender, _requestId, _stakeToken, _claimAmount, user.rewardDebt, user.cumulativePendingReward
-        );
+        emit IndexStakingRewardClaimed(msg.sender, _requestId, _stakeToken, _claimAmount, pool.lastGeneratedReward);
     }
 
     /**
@@ -620,14 +574,12 @@ contract IndexStaking is
      *
      * @param _requestId An ID for the staking reward claim order
      * @param _stakeToken address of the stake token of the staking pool
-     * @param _cumulativePendingReward Pending reward accumulated each time an user deposit or withdraw
      * @param _claimAmount The amount of reward tokens in the claim order
      * @param _signature The signature to validate the cancellation
      */
     function cancelClaimOrder(
         string calldata _requestId,
         address _stakeToken,
-        uint256 _cumulativePendingReward,
         uint256 _claimAmount,
         bytes memory _signature
     ) external whenNotPaused {
@@ -638,8 +590,7 @@ contract IndexStaking is
 
         // Verify the signature to ensure the validity of the cancellation
         require(
-            getSignerForRequest(_requestId, msg.sender, _stakeToken, _cumulativePendingReward, _claimAmount, _signature)
-                == validatorAddress,
+            getSignerForRequest(_requestId, msg.sender, _stakeToken, _claimAmount, _signature) == validatorAddress,
             "Index Staking: Invalid signature"
         );
         // Mark the order as cancelled
@@ -687,79 +638,6 @@ contract IndexStaking is
     }
 
     /**
-     * @dev Update the current reward amount value
-     * @param _reductionAmount  The amount by which the current reward amount is reduced
-     * @param _stakeTokens  List of all stake token address
-     */
-    function updateCurrentRewardAmount(uint256 _reductionAmount, address[] calldata _stakeTokens)
-        external
-        onlyAllowedAddressOrOwner
-    {
-        require(_reductionAmount != 0, "Index Staking: Reduction amount must be larger than 0");
-        require(
-            _stakeTokens.length == currentNumOfPools,
-            "Index Staking: The list stake token and total number of stake pool must have equal length"
-        );
-        for (uint256 i; i < currentNumOfPools;) {
-            PoolInfo storage poolInfo = tokenPoolInfo[_stakeTokens[i]];
-            require(poolInfo.stakeToken != IERC20(address(0)), "Index Staking: Pool not exist");
-            _updatePool(address(poolInfo.stakeToken));
-            unchecked {
-                ++i;
-            }
-        }
-        currentRewardAmount -= _reductionAmount;
-        emit CurrentRewardAmountUpdated(msg.sender, currentRewardAmount, block.timestamp);
-    }
-
-    /**
-     * @dev Add address to list address allowed set current reward amount
-     * @param _permissionedAddress Address to allow update current reward amount
-     */
-    function addPermissionedAddress(address _permissionedAddress) external onlyOwner {
-        require(_permissionedAddress != address(0), "Index Staking: Zero address not allowed");
-        require(
-            !isAllowedUpdate[_permissionedAddress], "Index Staking: List allowed address already contains this address"
-        );
-        listAllowedUpdate.push(_permissionedAddress);
-        allowedUpdateOneBasedIndexes[_permissionedAddress] = listAllowedUpdate.length;
-        isAllowedUpdate[_permissionedAddress] = true;
-        emit PermissionedAddressUpdated(
-            msg.sender, _permissionedAddress, isAllowedUpdate[_permissionedAddress], block.timestamp
-        );
-    }
-
-    /**
-     * @dev Remove address from list allowed set current reward amount
-     * @param _permissionedAddress Address to remove permission
-     */
-    function removePermissionedAddress(address _permissionedAddress) external onlyOwner {
-        require(_permissionedAddress != address(0), "Index Staking: Zero address not allowed");
-        require(
-            isAllowedUpdate[_permissionedAddress], "Index Staking: List allowed address does not contain this address"
-        );
-        uint256 len = listAllowedUpdate.length;
-        uint256 index = allowedUpdateOneBasedIndexes[_permissionedAddress];
-        address lastValue = listAllowedUpdate[len - 1];
-        listAllowedUpdate[index - 1] = lastValue;
-        allowedUpdateOneBasedIndexes[lastValue] = index;
-        // delete the index
-        delete allowedUpdateOneBasedIndexes[_permissionedAddress];
-        listAllowedUpdate.pop();
-        isAllowedUpdate[_permissionedAddress] = false;
-        emit PermissionedAddressUpdated(
-            msg.sender, _permissionedAddress, isAllowedUpdate[_permissionedAddress], block.timestamp
-        );
-    }
-
-    /**
-     * @dev Get list address allowed update current reward amount
-     */
-    function getListAllowedUpdate() external view returns (address[] memory) {
-        return listAllowedUpdate;
-    }
-
-    /**
      * @dev Allows the owner to set the bonus rate per second for specific pool, influencing the reward token per second calculation
      *
      * @param _stakeToken Stake token address
@@ -769,14 +647,13 @@ contract IndexStaking is
         require(_bonusRatePerSecond != 0, "Index Staking: Bonus rate per second must be greater than 0");
         PoolInfo storage pool = tokenPoolInfo[_stakeToken];
         require(pool.stakeToken != IERC20(address(0)), "Index Staking: Pool do not exist");
-        _updatePool(_stakeToken);
+        updatePool(_stakeToken);
         pool.bonusRatePerSecond = _bonusRatePerSecond;
         emit BonusRatePerSecondUpdated(
             msg.sender,
             _stakeToken,
             pool.bonusRatePerSecond,
             currentRewardAmount,
-            pool.rewardPerToken,
             pool.lastRewardTimestamp,
             block.timestamp
         );
@@ -815,7 +692,6 @@ contract IndexStaking is
      *
      * @param _requestId An ID for the staking reward claim or the cancellation claim
      * @param _stakeToken address of the stake token of the staking pool
-     * @param _cumulativePendingReward Pending reward accumulated each time an user deposit or withdraw
      * @param _claimAmount The amount of reward tokens to be claimed
      * @param _signature The signature to validate the claim or cancel claim
      */
@@ -823,12 +699,10 @@ contract IndexStaking is
         string calldata _requestId,
         address _beneficiary,
         address _stakeToken,
-        uint256 _cumulativePendingReward,
         uint256 _claimAmount,
         bytes memory _signature
     ) public view returns (address) {
-        ClaimRequest memory claimRequest =
-            ClaimRequest(_requestId, _beneficiary, _stakeToken, _cumulativePendingReward, _claimAmount);
+        ClaimRequest memory claimRequest = ClaimRequest(_requestId, _beneficiary, _stakeToken, _claimAmount);
         address signer = _verifyClaimRequest(claimRequest, _signature);
         return signer;
     }
@@ -838,33 +712,5 @@ contract IndexStaking is
      */
     function getDomainSeparator() external view returns (bytes32) {
         return _domainSeparatorV4();
-    }
-
-    /**
-     * @dev Verify the staking reward claim or the cancellation claim request with signature
-     *
-     * @param _claimRequest An ID for the staking reward claim or the cancellation claim
-     * @param _signature The signature to validate the claim
-     */
-    function _verifyClaimRequest(ClaimRequest memory _claimRequest, bytes memory _signature)
-        private
-        view
-        returns (address)
-    {
-        bytes32 digest = _hashTypedDataV4(
-            keccak256(
-                abi.encode(
-                    keccak256(
-                        "ClaimRequest(string requestId,address beneficiary,address stakeToken,uint256 cumulativePendingReward,uint256 claimAmount)"
-                    ),
-                    keccak256(bytes(_claimRequest.requestId)),
-                    _claimRequest.beneficiary,
-                    _claimRequest.stakeToken,
-                    _claimRequest.cumulativePendingReward,
-                    _claimRequest.claimAmount
-                )
-            )
-        );
-        return ECDSA.recover(digest, _signature);
     }
 }

@@ -45,7 +45,6 @@ contract IndexStakingTest is Test {
     address public constant ACCOUNT_THREE = address(3);
     address public validator = vm.addr(VALIDATOR_PRIVATE_KEY);
     uint256 public constant TEST_ACCOUNT_INITIAL_BALANCE = 1000 ether;
-    uint256 public constant CUMULATIVE_PENDING_REWARD = 1 ether;
     uint256 private constant PRECISION = 1e12;
 
     error OwnableUnauthorizedAccount(address account);
@@ -301,7 +300,6 @@ contract IndexStakingTest is Test {
         // Using account one
         vm.startPrank(ACCOUNT_ONE);
         uint256 depositAmount = 1 ether;
-        uint256 currentRewardAmount = indexStaking.currentRewardAmount();
         // Deposit one LPI token to according pool for staking
         lpiToken.approve(address(indexStaking), depositAmount);
         indexStaking.deposit(address(lpiToken), depositAmount);
@@ -309,29 +307,23 @@ contract IndexStakingTest is Test {
         assertEq(lpiToken.balanceOf(ACCOUNT_ONE), accOneBalanceAfterDeposit);
         assertEq(lpiToken.balanceOf(address(indexStaking)), depositAmount);
         // Get account one data after deposit
-        (, uint256 totalStakedAmount, uint256 rewardPerToken, uint256 bonusRatePerSecond, uint256 lastRewardTimestamp,)
-        = indexStaking.tokenPoolInfo(address(lpiToken));
-        assertEq(rewardPerToken, 0);
+        (, uint256 totalStakedAmount,,, uint256 lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lpiToken));
         assertEq(totalStakedAmount, depositAmount);
         assertEq(lastRewardTimestamp, block.timestamp);
-        (uint256 stakedAmount, uint256 lastStakedTimestamp, uint256 rewardDebt,) =
-            indexStaking.userInfo(ACCOUNT_ONE, address(lpiToken));
+        (uint256 stakedAmount, uint256 lastStakedTimestamp) = indexStaking.userInfo(ACCOUNT_ONE, address(lpiToken));
         assertEq(stakedAmount, depositAmount);
         assertEq(lastStakedTimestamp, block.timestamp);
-        assertEq(rewardDebt, 0);
         // Still using account one, deposit to other pool (LBI Pool)
         lbiToken.approve(address(indexStaking), depositAmount);
         indexStaking.deposit(address(lbiToken), depositAmount);
         assertEq(lbiToken.balanceOf(ACCOUNT_ONE), accOneBalanceAfterDeposit);
         assertEq(lbiToken.balanceOf(address(indexStaking)), depositAmount);
-        (, totalStakedAmount, rewardPerToken,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lbiToken));
-        assertEq(rewardPerToken, 0);
+        (, totalStakedAmount,,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lbiToken));
         assertEq(totalStakedAmount, depositAmount);
         assertEq(lastRewardTimestamp, block.timestamp);
-        (stakedAmount, lastStakedTimestamp, rewardDebt,) = indexStaking.userInfo(ACCOUNT_ONE, address(lbiToken));
+        (stakedAmount, lastStakedTimestamp) = indexStaking.userInfo(ACCOUNT_ONE, address(lbiToken));
         assertEq(stakedAmount, depositAmount);
         assertEq(lastStakedTimestamp, block.timestamp);
-        assertEq(rewardDebt, 0);
         // Deposit into the same LBI pool and check for data
         skip(1);
         vm.recordLogs();
@@ -341,19 +333,16 @@ contract IndexStakingTest is Test {
         assertEq(lbiToken.balanceOf(ACCOUNT_ONE), accOneBalanceAfterDeposit - depositAmount);
         assertEq(lbiToken.balanceOf(address(indexStaking)), depositAmount * 2);
 
-        (, totalStakedAmount, rewardPerToken,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lbiToken));
-        assertEq(rewardPerToken, currentRewardAmount * bonusRatePerSecond / 2 / depositAmount);
+        (, totalStakedAmount,,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lbiToken));
         assertEq(totalStakedAmount, depositAmount * 2);
         assertEq(lastRewardTimestamp, block.timestamp);
-        (stakedAmount, lastStakedTimestamp, rewardDebt,) = indexStaking.userInfo(ACCOUNT_ONE, address(lbiToken));
+        (stakedAmount, lastStakedTimestamp) = indexStaking.userInfo(ACCOUNT_ONE, address(lbiToken));
         assertEq(stakedAmount, depositAmount * 2);
         assertEq(lastStakedTimestamp, block.timestamp);
-        assertEq(rewardDebt, depositAmount * 2 * rewardPerToken / PRECISION);
         // Check for emitted event
         assertEq(entries[1].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
         assertEq(
-            entries[3].topics[0],
-            keccak256("DepositSucceeded(address,address,uint256,uint256,uint256,uint256,uint256,uint256)")
+            entries[3].topics[0], keccak256("DepositSucceeded(address,address,uint256,uint256,uint256,uint256,uint256)")
         );
         // Using account two to deposit into LPI pool, skip data check
         vm.stopPrank();
@@ -393,16 +382,12 @@ contract IndexStakingTest is Test {
         // Deposit 1 token into pool
         lpiToken.approve(address(indexStaking), depositAmount);
         indexStaking.deposit(address(lpiToken), depositAmount);
-        (, uint256 totalStakedAmount, uint256 rewardPerToken, uint256 bonusRatePerSecond, uint256 lastRewardTimestamp,)
-        = indexStaking.tokenPoolInfo(address(lpiToken));
-        assertEq(rewardPerToken, 0);
+        (, uint256 totalStakedAmount,,, uint256 lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lpiToken));
         assertEq(totalStakedAmount, depositAmount);
         assertEq(lastRewardTimestamp, block.timestamp);
-        (uint256 stakedAmount, uint256 lastStakedTimestamp, uint256 rewardDebt,) =
-            indexStaking.userInfo(ACCOUNT_ONE, address(lpiToken));
+        (uint256 stakedAmount, uint256 lastStakedTimestamp) = indexStaking.userInfo(ACCOUNT_ONE, address(lpiToken));
         assertEq(stakedAmount, depositAmount);
         assertEq(lastStakedTimestamp, block.timestamp);
-        assertEq(rewardDebt, 0);
         uint256 ACCOUNT_ONEBalanceBefore = lpiToken.balanceOf(ACCOUNT_ONE);
         uint256 currentRewardAmount = indexStaking.currentRewardAmount();
         // Withdraw 30% of the staked
@@ -410,35 +395,24 @@ contract IndexStakingTest is Test {
         vm.recordLogs();
         skip(1);
         indexStaking.withdraw(address(lpiToken), withdrawAmount);
-        (, totalStakedAmount, rewardPerToken,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lpiToken));
-        uint256 firstRewardPerToken = currentRewardAmount * bonusRatePerSecond / 2 / depositAmount;
-        assertEq(rewardPerToken, firstRewardPerToken);
+        (, totalStakedAmount,,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lpiToken));
         assertEq(lastRewardTimestamp, block.timestamp);
-        (stakedAmount, lastStakedTimestamp, rewardDebt,) = indexStaking.userInfo(ACCOUNT_ONE, address(lpiToken));
+        (stakedAmount, lastStakedTimestamp) = indexStaking.userInfo(ACCOUNT_ONE, address(lpiToken));
         assertEq(stakedAmount, depositAmount * 7 / 10);
-        assertEq(rewardDebt, rewardPerToken * stakedAmount / PRECISION);
         skip(10 days);
         currentRewardAmount = indexStaking.currentRewardAmount();
         indexStaking.withdraw(address(lpiToken), withdrawAmount);
-        (, totalStakedAmount, rewardPerToken,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lpiToken));
-        assertEq(
-            rewardPerToken,
-            (10 days) * currentRewardAmount * bonusRatePerSecond / 2 * 10 / (depositAmount * 7) + firstRewardPerToken
-        );
+        (, totalStakedAmount,,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lpiToken));
         assertEq(totalStakedAmount, depositAmount * 4 / 10);
-        (stakedAmount, lastStakedTimestamp, rewardDebt,) = indexStaking.userInfo(ACCOUNT_ONE, address(lpiToken));
+        (stakedAmount, lastStakedTimestamp) = indexStaking.userInfo(ACCOUNT_ONE, address(lpiToken));
         assertEq(stakedAmount, depositAmount * 4 / 10);
         assertEq(lastStakedTimestamp, 1);
-        assertEq(rewardDebt, stakedAmount * rewardPerToken / PRECISION);
         Vm.Log[] memory entries = vm.getRecordedLogs();
         uint256 ACCOUNT_ONEBalanceAfter = lpiToken.balanceOf(ACCOUNT_ONE);
         assertEq(ACCOUNT_ONEBalanceAfter, ACCOUNT_ONEBalanceBefore + withdrawAmount * 2);
         // Check for emitted event
         assertEq(entries[0].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
-        assertEq(
-            entries[2].topics[0],
-            keccak256("WithdrawSucceeded(address,address,uint256,uint256,uint256,uint256,uint256)")
-        );
+        assertEq(entries[2].topics[0], keccak256("WithdrawSucceeded(address,address,uint256,uint256,uint256,uint256)"));
     }
 
     function test_withdraw_fail() public {
@@ -470,7 +444,6 @@ contract IndexStakingTest is Test {
             requestId: requestId,
             beneficiary: ACCOUNT_ONE,
             stakeToken: address(lpiToken),
-            cumulativePendingReward: CUMULATIVE_PENDING_REWARD,
             claimAmount: claimAmount
         });
         bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
@@ -480,34 +453,17 @@ contract IndexStakingTest is Test {
         vm.startPrank(ACCOUNT_ONE);
         lpiToken.approve(address(indexStaking), stakeAmount * 2);
         indexStaking.deposit(address(lpiToken), stakeAmount);
-        uint256 userRewardDebt = getUserRewardDebt(indexStaking, ACCOUNT_ONE, address(lpiToken));
         skip(10 days);
         indexStaking.deposit(address(lpiToken), stakeAmount);
         uint256 accountContractVestingBefore = lockToken.balanceOf(address(lockonVesting));
-        assertEq(
-            getUserCumulativePendingReward(indexStaking, ACCOUNT_ONE, address(lpiToken)),
-            calculateCumulatePendingReward(
-                stakeAmount, getRewardPerTokenOfPool(indexStaking, address(lpiToken)), PRECISION, userRewardDebt
-            )
-        );
-        uint256 cumulativePendingRewardBeforeClaim =
-            getUserCumulativePendingReward(indexStaking, ACCOUNT_ONE, address(lpiToken));
         skip(10);
         vm.recordLogs();
-        indexStaking.claimIndexStakingReward(
-            requestId, address(lpiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signature
-        );
-        assertEq(
-            getUserCumulativePendingReward(indexStaking, ACCOUNT_ONE, address(lpiToken)),
-            cumulativePendingRewardBeforeClaim - CUMULATIVE_PENDING_REWARD
-        );
+        indexStaking.claimIndexStakingReward(requestId, address(lpiToken), claimAmount, signature);
         Vm.Log[] memory entries = vm.getRecordedLogs();
         // Transfer token to vesting contract
         assertEq(lockToken.balanceOf(address(lockonVesting)), accountContractVestingBefore + claimAmount);
         assertEq(entries[0].topics[0], keccak256("PoolDataUpdated(address,address,uint256,uint256,uint256)"));
-        assertEq(
-            entries[4].topics[0], keccak256("IndexStakingRewardClaimed(address,string,address,uint256,uint256,uint256)")
-        );
+        assertEq(entries[4].topics[0], keccak256("IndexStakingRewardClaimed(address,string,address,uint256,uint256)"));
     }
 
     function test_claim_index_staking_reward_fail() public {
@@ -521,7 +477,6 @@ contract IndexStakingTest is Test {
             requestId: requestId,
             beneficiary: ACCOUNT_ONE,
             stakeToken: address(lpiToken),
-            cumulativePendingReward: CUMULATIVE_PENDING_REWARD,
             claimAmount: claimAmount
         });
         bytes32 digest = sigUtils.getTypedDataHash(validClaimRequest);
@@ -534,7 +489,6 @@ contract IndexStakingTest is Test {
             requestId: requestId,
             beneficiary: ACCOUNT_ONE,
             stakeToken: address(lpiToken),
-            cumulativePendingReward: CUMULATIVE_PENDING_REWARD,
             claimAmount: invalidAmount
         });
         digest = sigUtils.getTypedDataHash(invalidCancelClaimRequest);
@@ -544,46 +498,32 @@ contract IndexStakingTest is Test {
         // User not stake any Token but still call to withdraw
         vm.startPrank(ACCOUNT_ONE);
         vm.expectRevert("Index Staking: User hasn't staked any token yet");
-        indexStaking.claimIndexStakingReward(
-            requestId, address(lpiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signatureWithValidAmount
-        );
+        indexStaking.claimIndexStakingReward(requestId, address(lpiToken), claimAmount, signatureWithValidAmount);
         // Account two using signature that is generated for account one
         vm.startPrank(ACCOUNT_TWO);
         lpiToken.approve(address(indexStaking), stakeAmount);
         indexStaking.deposit(address(lpiToken), stakeAmount);
         vm.expectRevert("Index Staking: Invalid signature");
-        indexStaking.claimIndexStakingReward(
-            requestId, address(lpiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signatureWithValidAmount
-        );
+        indexStaking.claimIndexStakingReward(requestId, address(lpiToken), claimAmount, signatureWithValidAmount);
         // Claim the wrong pool
         vm.startPrank(ACCOUNT_ONE);
         lbiToken.approve(address(indexStaking), stakeAmount);
         indexStaking.deposit(address(lbiToken), stakeAmount);
         vm.expectRevert("Index Staking: Invalid signature");
-        indexStaking.claimIndexStakingReward(
-            requestId, address(lbiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signatureWithValidAmount
-        );
+        indexStaking.claimIndexStakingReward(requestId, address(lbiToken), claimAmount, signatureWithValidAmount);
         vm.expectRevert("Index Staking: Pool do not exist");
-        indexStaking.claimIndexStakingReward(
-            requestId, address(0), CUMULATIVE_PENDING_REWARD, claimAmount, signatureWithValidAmount
-        );
+        indexStaking.claimIndexStakingReward(requestId, address(0), claimAmount, signatureWithValidAmount);
         lpiToken.approve(address(indexStaking), stakeAmount * 2);
         indexStaking.deposit(address(lpiToken), stakeAmount);
         skip(10 days);
         indexStaking.deposit(address(lpiToken), stakeAmount);
         // Claim exceed maximum reward amount
         vm.expectRevert("Index Staking: Claim amount exceed remaining reward");
-        indexStaking.claimIndexStakingReward(
-            requestId, address(lpiToken), CUMULATIVE_PENDING_REWARD, invalidAmount, signatureWithInvalidAmount
-        );
+        indexStaking.claimIndexStakingReward(requestId, address(lpiToken), invalidAmount, signatureWithInvalidAmount);
         // Prevent double claim
-        indexStaking.claimIndexStakingReward(
-            requestId, address(lpiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signatureWithValidAmount
-        );
+        indexStaking.claimIndexStakingReward(requestId, address(lpiToken), claimAmount, signatureWithValidAmount);
         vm.expectRevert("Index Staking: Request already processed");
-        indexStaking.claimIndexStakingReward(
-            requestId, address(lpiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signatureWithValidAmount
-        );
+        indexStaking.claimIndexStakingReward(requestId, address(lpiToken), claimAmount, signatureWithValidAmount);
     }
 
     function test_cancel_claim_order() public {
@@ -595,7 +535,6 @@ contract IndexStakingTest is Test {
             requestId: requestId,
             beneficiary: ACCOUNT_ONE,
             stakeToken: address(lpiToken),
-            cumulativePendingReward: CUMULATIVE_PENDING_REWARD,
             claimAmount: claimAmount
         });
         bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
@@ -607,14 +546,12 @@ contract IndexStakingTest is Test {
         lpiToken.approve(address(indexStaking), stakeAmount);
         indexStaking.deposit(address(lpiToken), stakeAmount);
         vm.recordLogs();
-        indexStaking.cancelClaimOrder(requestId, address(lpiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signature);
+        indexStaking.cancelClaimOrder(requestId, address(lpiToken), claimAmount, signature);
         Vm.Log[] memory entries = vm.getRecordedLogs();
         assertEq(entries[0].topics[0], keccak256("ClaimOrderCancel(address,string,address)"));
         // Make sure that the requestId cannot be claimed after cancel
         vm.expectRevert("Index Staking: Request already processed");
-        indexStaking.claimIndexStakingReward(
-            requestId, address(lpiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signature
-        );
+        indexStaking.claimIndexStakingReward(requestId, address(lpiToken), claimAmount, signature);
     }
 
     function test_cancel_claim_order_fail() public {
@@ -626,7 +563,6 @@ contract IndexStakingTest is Test {
             requestId: requestId,
             beneficiary: ACCOUNT_ONE,
             stakeToken: address(lpiToken),
-            cumulativePendingReward: CUMULATIVE_PENDING_REWARD,
             claimAmount: claimAmount
         });
         bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
@@ -636,123 +572,22 @@ contract IndexStakingTest is Test {
         // User not stake any Lock Token but still call to cancel claim
         vm.startPrank(ACCOUNT_ONE);
         vm.expectRevert("Index Staking: User hasn't staked any token yet");
-        indexStaking.cancelClaimOrder(requestId, address(lpiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signature);
+        indexStaking.cancelClaimOrder(requestId, address(lpiToken), claimAmount, signature);
         // Account two using signature that is generated for account one
         vm.startPrank(ACCOUNT_TWO);
         lpiToken.approve(address(indexStaking), stakeAmount * 2);
         indexStaking.deposit(address(lpiToken), stakeAmount * 2);
         vm.expectRevert("Index Staking: Invalid signature");
-        indexStaking.cancelClaimOrder(requestId, address(lpiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signature);
+        indexStaking.cancelClaimOrder(requestId, address(lpiToken), claimAmount, signature);
         // Reward that already claimed cannot be cancelled
         vm.startPrank(ACCOUNT_ONE);
         lpiToken.approve(address(indexStaking), stakeAmount * 2);
         indexStaking.deposit(address(lpiToken), stakeAmount);
         skip(10 days);
         indexStaking.deposit(address(lpiToken), stakeAmount);
-        indexStaking.claimIndexStakingReward(
-            requestId, address(lpiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signature
-        );
+        indexStaking.claimIndexStakingReward(requestId, address(lpiToken), claimAmount, signature);
         vm.expectRevert("Index Staking: Request already processed");
-        indexStaking.cancelClaimOrder(requestId, address(lpiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signature);
-    }
-
-    function test__add_address_update_permission() public {
-        initializeAndConfig();
-        vm.startPrank(OWNER);
-        vm.recordLogs();
-        indexStaking.addPermissionedAddress(ACCOUNT_ONE);
-        assertEq(indexStaking.isAllowedUpdate(ACCOUNT_ONE), true);
-        address[] memory listAllowedUpdate = indexStaking.getListAllowedUpdate();
-        assertEq(listAllowedUpdate[0], ACCOUNT_ONE);
-        vm.roll(block.number + 1);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-        assertEq(entries[0].topics[0], keccak256("PermissionedAddressUpdated(address,address,bool,uint256)"));
-    }
-
-    function test__remove_address_update_permission() public {
-        initializeAndConfig();
-        vm.startPrank(OWNER);
-        vm.recordLogs();
-        indexStaking.addPermissionedAddress(ACCOUNT_ONE);
-        indexStaking.removePermissionedAddress(ACCOUNT_ONE);
-        indexStaking.addPermissionedAddress(ACCOUNT_ONE);
-        assertEq(indexStaking.isAllowedUpdate(ACCOUNT_ONE), true);
-        address[] memory listAllowedUpdate = indexStaking.getListAllowedUpdate();
-        assertEq(listAllowedUpdate[0], ACCOUNT_ONE);
-        indexStaking.removePermissionedAddress(ACCOUNT_ONE);
-        listAllowedUpdate = indexStaking.getListAllowedUpdate();
-        assertEq(indexStaking.isAllowedUpdate(ACCOUNT_ONE), false);
-        assertEq(listAllowedUpdate.length, 0);
-        indexStaking.addPermissionedAddress(ACCOUNT_ONE);
-        indexStaking.addPermissionedAddress(ACCOUNT_TWO);
-        indexStaking.removePermissionedAddress(ACCOUNT_TWO);
-        listAllowedUpdate = indexStaking.getListAllowedUpdate();
-        assertEq(listAllowedUpdate[0], ACCOUNT_ONE);
-        vm.roll(block.number + 1);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-        assertEq(entries[0].topics[0], keccak256("PermissionedAddressUpdated(address,address,bool,uint256)"));
-        assertEq(entries[1].topics[0], keccak256("PermissionedAddressUpdated(address,address,bool,uint256)"));
-        assertEq(entries[2].topics[0], keccak256("PermissionedAddressUpdated(address,address,bool,uint256)"));
-        assertEq(entries[3].topics[0], keccak256("PermissionedAddressUpdated(address,address,bool,uint256)"));
-    }
-
-    function test__add_and_remove_address_update_permission_fail() public {
-        initializeAndConfig();
-        vm.startPrank(OWNER);
-        indexStaking.addPermissionedAddress(ACCOUNT_ONE);
-        vm.expectRevert("Index Staking: Zero address not allowed");
-        indexStaking.addPermissionedAddress(address(0));
-        vm.expectRevert("Index Staking: List allowed address already contains this address");
-        indexStaking.addPermissionedAddress(ACCOUNT_ONE);
-        vm.expectRevert("Index Staking: Zero address not allowed");
-        indexStaking.removePermissionedAddress(address(0));
-        vm.expectRevert("Index Staking: List allowed address does not contain this address");
-        indexStaking.removePermissionedAddress(ACCOUNT_TWO);
-    }
-
-    function test_update_current_reward_amount() public {
-        initializeAndConfig();
-        vm.startPrank(OWNER);
-        indexStaking.addPermissionedAddress(ACCOUNT_ONE);
-        address[] memory tokenAddresses = new address[](2);
-        tokenAddresses[0] = address(lpiToken);
-        tokenAddresses[1] = address(lbiToken);
-        lbiToken.approve(address(indexStaking), 1 ether);
-        indexStaking.deposit(address(lbiToken), 1 ether);
-        lpiToken.approve(address(indexStaking), 1 ether);
-        indexStaking.deposit(address(lpiToken), 1 ether);
-        vm.recordLogs();
-        indexStaking.updateCurrentRewardAmount(10 ether, tokenAddresses);
-        assertEq(indexStaking.currentRewardAmount(), 99990 ether);
-        vm.stopPrank();
-        vm.startPrank(ACCOUNT_ONE);
-        indexStaking.updateCurrentRewardAmount(100 ether, tokenAddresses);
-        assertEq(indexStaking.currentRewardAmount(), 99890 ether);
-        vm.roll(block.number + 1);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-        assertEq(entries[0].topics[0], keccak256("CurrentRewardAmountUpdated(address,uint256,uint256)"));
-        assertEq(entries[1].topics[0], keccak256("CurrentRewardAmountUpdated(address,uint256,uint256)"));
-    }
-
-    function test_update_current_reward_amount_fail() public {
-        initializeAndConfig();
-        address[] memory tokenAddresses = new address[](2);
-        tokenAddresses[0] = address(lpiToken);
-        tokenAddresses[1] = address(lbiToken);
-        address[] memory stakeTokens = new address[](1);
-        tokenAddresses[0] = address(lpiToken);
-        vm.startPrank(ACCOUNT_ONE);
-        vm.expectRevert("Index Staking: Forbidden");
-        indexStaking.updateCurrentRewardAmount(919999, tokenAddresses);
-        vm.stopPrank();
-        vm.startPrank(OWNER);
-        vm.expectRevert("Index Staking: Reduction amount must be larger than 0");
-        indexStaking.updateCurrentRewardAmount(0, tokenAddresses);
-        vm.expectRevert("Index Staking: The list stake token and total number of stake pool must have equal length");
-        indexStaking.updateCurrentRewardAmount(10, stakeTokens);
-        tokenAddresses[0] = address(0);
-        vm.expectRevert("Index Staking: Pool not exist");
-        indexStaking.updateCurrentRewardAmount(110, tokenAddresses);
+        indexStaking.cancelClaimOrder(requestId, address(lpiToken), claimAmount, signature);
     }
 
     function test_set_validator_address() public {
@@ -809,7 +644,7 @@ contract IndexStakingTest is Test {
         assertEq(bonusRatePerSecond, 2500);
         assertEq(
             entries[0].topics[0],
-            keccak256("BonusRatePerSecondUpdated(address,address,uint256,uint256,uint256,uint256,uint256)")
+            keccak256("BonusRatePerSecondUpdated(address,address,uint256,uint256,uint256,uint256)")
         );
     }
 
@@ -829,25 +664,12 @@ contract IndexStakingTest is Test {
         indexStaking.setBonusRatePerSecond(address(erc20Token), 0);
     }
 
-    function test_view_function() public {
-        initializeAndConfig();
-        vm.startPrank(OWNER);
-        assertEq(indexStaking.rewardTokenPerSecond(address(lpiToken)), 100000 ether * 2300 / 2 / PRECISION);
-        assertEq(
-            indexStaking.getRewardMultiplier(address(lpiToken), 100, 1000),
-            (1000 - 100) * indexStaking.rewardTokenPerSecond(address(lpiToken))
-        );
-        assertEq(
-            indexStaking.getRewardMultiplier(address(lpiToken), 1, 100000 days), indexStaking.currentRewardAmount()
-        );
-    }
-
-    function test__get_current_reward_per_token() public {
+    function test__update_pool() public {
         lockonVesting.addAddressDepositPermission(address(indexStaking));
         IndexStaking.InitPoolInfo memory firstPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.timestamp, 3);
+            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.timestamp, 1);
         IndexStaking.InitPoolInfo memory secondPoolInfo =
-            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300, block.timestamp, 4);
+            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300, block.timestamp, 2);
         IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
         poolInfos[0] = firstPoolInfo;
         poolInfos[1] = secondPoolInfo;
@@ -858,7 +680,7 @@ contract IndexStakingTest is Test {
                 validator,
                 address(lockonVesting),
                 address(lockToken),
-                2000000000 ether,
+                100000 ether,
                 "INDEX_STAKING",
                 "1",
                 poolInfos
@@ -866,7 +688,7 @@ contract IndexStakingTest is Test {
         );
         indexStakingProxy = new ERC1967Proxy(address(indexStaking), indexStakingData);
         indexStaking = IndexStaking(address(indexStakingProxy));
-        uint256 depositAmount = 10 ether;
+        uint256 depositAmount = 1 ether;
 
         lbiToken.transfer(address(indexStaking), depositAmount * 2);
         lbiToken.transfer(ACCOUNT_ONE, depositAmount * 2);
@@ -880,27 +702,98 @@ contract IndexStakingTest is Test {
 
         // user first deposit
         indexStaking.deposit(address(lbiToken), depositAmount);
-        indexStaking.getCurrentRewardPerToken(address(lbiToken));
-        (, uint256 totalStakedAmount, uint256 rewardPerToken, uint256 bonusRatePerSecond, uint256 lastRewardTimestamp,)
-        = indexStaking.tokenPoolInfo(address(lbiToken));
-        uint256 oldTotalStakedAmount = totalStakedAmount;
+        skip(10 days);
+        (,, uint256 lastGeneratedReward, uint256 bonusRatePerSecond, uint256 lastRewardTimestamp,) =
+            indexStaking.tokenPoolInfo(address(lbiToken));
+        currentRewardAmount = indexStaking.currentRewardAmount();
+        indexStaking.updatePool(address(lbiToken));
+        indexStaking.deposit(address(lbiToken), depositAmount);
+        (,, lastGeneratedReward,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lbiToken));
+        assertEq(lastGeneratedReward, 10 days * currentRewardAmount * bonusRatePerSecond / 2 / 1e12);
+        assertEq(lastRewardTimestamp, 10 days + 1);
+    }
+
+    function test__update_pool_failed() public {
+        lockonVesting.addAddressDepositPermission(address(indexStaking));
+        IndexStaking.InitPoolInfo memory firstPoolInfo =
+            IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, block.timestamp, 1);
+        IndexStaking.InitPoolInfo memory secondPoolInfo =
+            IndexStaking.InitPoolInfo(IERC20(address(lbiToken)), 2300000000, block.timestamp, 2);
+        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
+        poolInfos[0] = firstPoolInfo;
+        poolInfos[1] = secondPoolInfo;
+        bytes memory indexStakingData = abi.encodeCall(
+            indexStaking.initialize,
+            (
+                OWNER,
+                validator,
+                address(lockonVesting),
+                address(lockToken),
+                100000 ether,
+                "INDEX_STAKING",
+                "1",
+                poolInfos
+            )
+        );
+        indexStakingProxy = new ERC1967Proxy(address(indexStaking), indexStakingData);
+        indexStaking = IndexStaking(address(indexStakingProxy));
+        uint256 depositAmount = 10000 ether;
+
+        lbiToken.transfer(address(indexStaking), depositAmount * 2);
+        lbiToken.transfer(ACCOUNT_ONE, depositAmount * 2);
+        lpiToken.transfer(address(indexStaking), depositAmount * 2);
+        lpiToken.transfer(ACCOUNT_ONE, depositAmount * 2);
+        lockToken.transfer(address(indexStaking), 10 ether);
+        lockToken.approve(address(indexStaking), depositAmount * 2);
+
+        vm.stopPrank();
+        vm.startPrank(ACCOUNT_ONE);
+        vm.expectRevert("Index Staking: Pool do not exist");
+        indexStaking.updatePool(address(ACCOUNT_THREE));
+    }
+
+    function test_view_function() public {
+        initializeAndConfig();
+        vm.startPrank(OWNER);
+        assertEq(indexStaking.rewardTokenPerSecond(address(lpiToken)), 100000 ether * 2300 / 2 / PRECISION);
+        assertEq(
+            indexStaking.getRewardMultiplier(address(lpiToken), 100, 1000),
+            (1000 - 100) * indexStaking.rewardTokenPerSecond(address(lpiToken))
+        );
+        assertEq(
+            indexStaking.getRewardMultiplier(address(lpiToken), 1, 100000 days), indexStaking.currentRewardAmount()
+        );
+    }
+
+    function test__get_last_generated_reward() public {
+        initializeAndConfig();
+        vm.startPrank(OWNER);
+        uint256 currentRewardAmount = indexStaking.currentRewardAmount();
+        assertEq(indexStaking.getLastGeneratedReward(address(lbiToken)), 0);
+        uint256 depositAmount = 10 ether;
+        lbiToken.transfer(address(indexStaking), depositAmount * 2);
+        lbiToken.transfer(ACCOUNT_ONE, depositAmount * 2);
+        lockToken.transfer(address(indexStaking), 1000 ether);
+        lockToken.approve(address(indexStaking), depositAmount * 2);
+        vm.stopPrank();
+        vm.startPrank(ACCOUNT_ONE);
+        lbiToken.approve(address(indexStaking), depositAmount * 2);
+
+        // user first deposit
+        indexStaking.deposit(address(lbiToken), depositAmount);
+        indexStaking.getLastGeneratedReward(address(lbiToken));
+        (,, uint256 generatedReward, uint256 bonusRatePerSecond, uint256 lastRewardTimestamp,) =
+            indexStaking.tokenPoolInfo(address(lbiToken));
         skip(117);
         assertEq(
-            indexStaking.getCurrentRewardPerToken(address(lbiToken)),
-            117 * currentRewardAmount * bonusRatePerSecond / 2 / totalStakedAmount
+            indexStaking.getLastGeneratedReward(address(lbiToken)),
+            117 * currentRewardAmount * bonusRatePerSecond / 2 / PRECISION
         );
         // Update current reward amount
         currentRewardAmount = indexStaking.currentRewardAmount();
         indexStaking.deposit(address(lbiToken), depositAmount);
-        (,, rewardPerToken,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lbiToken));
-
+        (,, generatedReward,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lbiToken));
         assertEq(lastRewardTimestamp, 118);
-        indexStaking.withdraw(address(lbiToken), depositAmount * 2);
-        (, totalStakedAmount, rewardPerToken,, lastRewardTimestamp,) = indexStaking.tokenPoolInfo(address(lbiToken));
-        // Reward per token unchanged
-        assertEq(rewardPerToken, 117 * currentRewardAmount * bonusRatePerSecond / 2 / oldTotalStakedAmount);
-        assertEq(indexStaking.getCurrentRewardPerToken(address(lbiToken)), rewardPerToken);
-        assertEq(totalStakedAmount, 0);
     }
 
     function test_allocate_token() public {
@@ -945,9 +838,7 @@ contract IndexStakingTest is Test {
         vm.expectRevert(EnforcedPause.selector);
         indexStaking.withdraw(address(lbiToken), amount);
         vm.expectRevert(EnforcedPause.selector);
-        indexStaking.claimIndexStakingReward(
-            "requestId", address(lbiToken), CUMULATIVE_PENDING_REWARD, amount, bytes("0x")
-        );
+        indexStaking.claimIndexStakingReward("requestId", address(lbiToken), amount, bytes("0x"));
         vm.stopPrank();
         // Transaction can be executed normal when unpause
         vm.prank(OWNER);
@@ -965,7 +856,6 @@ contract IndexStakingTest is Test {
             requestId: requestId,
             beneficiary: ACCOUNT_ONE,
             stakeToken: address(lpiToken),
-            cumulativePendingReward: CUMULATIVE_PENDING_REWARD,
             claimAmount: claimAmount
         });
         bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
@@ -976,28 +866,9 @@ contract IndexStakingTest is Test {
         vm.startPrank(ACCOUNT_ONE);
         lpiToken.approve(address(indexStaking), claimAmount);
         indexStaking.deposit(address(lpiToken), claimAmount);
-        address signer = indexStaking.getSignerForRequest(
-            requestId, ACCOUNT_ONE, address(lpiToken), CUMULATIVE_PENDING_REWARD, claimAmount, signature
-        );
+        address signer =
+            indexStaking.getSignerForRequest(requestId, ACCOUNT_ONE, address(lpiToken), claimAmount, signature);
         assertEq(signer, validator);
-    }
-
-    function getRewardPerTokenOfPool(IndexStaking indexStakingContract, address tokenAddress)
-        public
-        view
-        returns (uint256)
-    {
-        (,, uint256 rewardPerToken,,,) = indexStakingContract.tokenPoolInfo(tokenAddress);
-        return rewardPerToken;
-    }
-
-    function getUserCumulativePendingReward(IndexStaking indexStakingContract, address user, address tokenAddress)
-        public
-        view
-        returns (uint256)
-    {
-        (,,, uint256 userCumulativePendingReward) = indexStakingContract.userInfo(user, tokenAddress);
-        return userCumulativePendingReward;
     }
 
     function getUserStakedAmount(IndexStaking indexStakingContract, address user, address tokenAddress)
@@ -1005,25 +876,7 @@ contract IndexStakingTest is Test {
         view
         returns (uint256)
     {
-        (uint256 stakedAmount,,,) = indexStakingContract.userInfo(user, tokenAddress);
+        (uint256 stakedAmount,) = indexStakingContract.userInfo(user, tokenAddress);
         return stakedAmount;
-    }
-
-    function getUserRewardDebt(IndexStaking indexStakingContract, address user, address tokenAddress)
-        public
-        view
-        returns (uint256)
-    {
-        (,, uint256 rewardDebt,) = indexStakingContract.userInfo(user, tokenAddress);
-        return rewardDebt;
-    }
-
-    function calculateCumulatePendingReward(
-        uint256 stakedAmount,
-        uint256 rewardPerToken,
-        uint256 precision,
-        uint256 rewardDebt
-    ) public pure returns (uint256) {
-        return ((stakedAmount * rewardPerToken) / precision) - rewardDebt;
     }
 }

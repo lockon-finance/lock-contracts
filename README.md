@@ -94,9 +94,3 @@ $ forge --help
 $ anvil --help
 $ cast --help
 ```
-### Airdrop Testing
-Update file user-airdrop-info-test.json and run file generate_merkle_root_test.ts for generating results use in unit test
-Run this command to get merkle tree data: 
-```shell
-$ ts-node test/airdrop-utils/generate_merkle_root_test.ts
-```

@@ -20,7 +20,6 @@ export function getEnvParams() {
   const operatorAddress = getEnvRequired("OPERATOR_ADDRESS")
   const managementAddress = getEnvRequired("MANAGEMENT_ADDRESS")
   const feeReceiverAddress = getEnvRequired("FEE_RECEIVER_ADDRESS")
-  const merkleRoot = getEnv("MERKLE_ROOT")
   const initialIndexTokenAddresses = getEnvRequired("INITIAL_INDEX_TOKEN_ADDRESSES")
 
   const initialIndexTokenAddressArray = initialIndexTokenAddresses.split(",");
@@ -31,7 +30,6 @@ export function getEnvParams() {
     operatorAddress,
     managementAddress,
     feeReceiverAddress,
-    merkleRoot,
     initialIndexTokenAddresses: initialIndexTokenAddressArray,
   }
 }
