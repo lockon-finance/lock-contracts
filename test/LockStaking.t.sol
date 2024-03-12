@@ -317,6 +317,11 @@ contract LockStakingTest is Test {
         lockToken.approve(address(lockStaking), 1 ether);
         // Lock one Lock Token for 200 days
         lockStaking.addLockToken(lockAmount, 200 days);
+        assertEq(lockStaking.getUserLockScore(0, 10 days), 0);
+        assertEq(
+            lockStaking.getUserLockScore(0, 321 days),
+            (((lockAmount) * lockStaking.basicRate()) * lockStaking.durationRate(321 days)) / 1e12 / PRECISION
+        );
         // Increase 30 days
         skip(30 days);
         (

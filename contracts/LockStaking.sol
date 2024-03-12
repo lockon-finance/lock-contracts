@@ -453,6 +453,22 @@ contract LockStaking is
     }
 
     /**
+     * @dev Calculates and returns the lock score of the user
+     * @param _lockAmount   Amount of LOCK Token to stake
+     * @param _lockDuration   Duration of the lock
+     */
+    function getUserLockScore(uint256 _lockAmount, uint256 _lockDuration) public view returns (uint256) {
+        uint256 now_ = block.timestamp;
+        if (_lockDuration < minimumLockDuration || now_ < startTimestamp) return 0;
+        UserInfo storage _currentUserInfo = userInfo[msg.sender];
+        uint256 userLockAmount = _currentUserInfo.lockedAmount;
+        userLockAmount += _lockAmount;
+        (, uint256 newLockDuration) =
+            _calculateLockTimestamp(_currentUserInfo.lockEndTimestamp, _lockDuration, now_);
+        return (userLockAmount * basicRate() * durationRate(newLockDuration)) / PRECISION / PRECISION;
+    }
+
+    /**
      * @dev Calculates and returns the pending reward for a given user based on their deposited amount,
      * the current reward rate per LOCK score, the cumulative pending reward and the difference in block
      * timestamps between the last reward calculation and the current block
@@ -474,7 +490,7 @@ contract LockStaking is
         return user.cumulativePendingReward + ((user.lockScore * _rewardPerScore) / PRECISION) - user.rewardDebt;
     }
 
-    /* ============ Public Functions ============ */
+    /* ============ Private Functions ============ */
 
     /**
      * @dev Updates the pool by calculating and distributing rewards to stakers based on the difference in block
@@ -513,7 +529,7 @@ contract LockStaking is
      */
     function addLockToken(uint256 _lockAmount, uint256 _lockDuration) external whenNotPaused nonReentrant {
         uint256 now_ = block.timestamp;
-        require(_lockAmount > 0, "LOCK Staking: Locked amount must be greater than 0");
+        require(_lockAmount != 0, "LOCK Staking: Locked amount must be greater than 0");
         require(_lockDuration >= minimumLockDuration, "LOCK Staking: Minimum lock duration does not meet");
         require(now_ >= startTimestamp, "LOCK Staking: Staking not start");
 
