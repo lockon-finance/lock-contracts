@@ -24,6 +24,8 @@ async function main() {
     lockonVestingAddr
   );
   saveContract(network.name, "lockonVesting", lockonVestingAddr);
+
+  console.log("Note: Set addresses(lockStaking, indexStaking, airdrop) with addAddressDepositPermission.");
 }
 
 main().catch((error) => {

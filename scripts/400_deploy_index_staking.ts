@@ -13,7 +13,6 @@ async function main() {
   const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
   const startTimestamp = Math.floor(Date.now() / 1000);
   const bonusRatePerSecond = 2300; // (decimals=1e12)
-  const vestingCategoryIds = [3, 4];
   const indexStaking = await defender.deployProxy(IndexStaking, [
     ownerAddress,
     envParams.operatorAddress,
@@ -24,7 +23,7 @@ async function main() {
     "1",
     // Initial pool info (Index token address, bonusRatePerSecond, startTimestamp, vestingCategoryId)
     envParams.initialIndexTokenAddresses.map((address, index) =>
-      [address, bonusRatePerSecond, startTimestamp, vestingCategoryIds[index]]),
+      [address, bonusRatePerSecond, startTimestamp, envParams.initialIndexTokenVestingCategoryIds[index]]),
   ], { initializer: "initialize", kind: "uups" });
 
   await indexStaking.waitForDeployment();

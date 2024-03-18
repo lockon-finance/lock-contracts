@@ -21,8 +21,13 @@ export function getEnvParams() {
   const managementAddress = getEnvRequired("MANAGEMENT_ADDRESS")
   const feeReceiverAddress = getEnvRequired("FEE_RECEIVER_ADDRESS")
   const initialIndexTokenAddresses = getEnvRequired("INITIAL_INDEX_TOKEN_ADDRESSES")
+  const initialIndexTokenVestingCategoryIds = getEnvRequired("INITIAL_INDEX_TOKEN_VESTING_CATEGORY_IDS")
 
   const initialIndexTokenAddressArray = initialIndexTokenAddresses.split(",");
+  const initialIndexTokenVestingCategoryIdArray = initialIndexTokenVestingCategoryIds.split(",");
+  if (initialIndexTokenAddressArray.length !== initialIndexTokenVestingCategoryIdArray.length) {
+      throw new Error("INITIAL_INDEX_TOKEN_ADDRESSES and INITIAL_INDEX_TOKEN_VESTING_CATEGORY_IDS must have the same number of elements");
+  }
 
   return {
     lockTokenName,
@@ -31,6 +36,7 @@ export function getEnvParams() {
     managementAddress,
     feeReceiverAddress,
     initialIndexTokenAddresses: initialIndexTokenAddressArray,
+    initialIndexTokenVestingCategoryIds: initialIndexTokenVestingCategoryIdArray,
   }
 }
 

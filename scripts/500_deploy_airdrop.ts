@@ -29,6 +29,8 @@ async function main() {
   const airdropAddr = await airdrop.getAddress();
   console.log("Airdrop contract deployed to address:", airdropAddr);
   saveContract(network.name, "airdrop", airdropAddr);
+
+  console.log("Note: Set operatorAddress with addDistributePermission.");
 }
 
 main().catch((error) => {

@@ -1,9 +1,9 @@
 {
     "polygon": {
         "lockToken": "0x8b283425FA255cc9C339C8Ca236B5dc27E2F83d5",
-        "lockonVesting": "0x84D5Bd6269CE4198Bf298122ce5842cc30236CD8",
         "lockStaking": "0xb8Fa7F27E8B238Ae28F807bd8aFB872984451ad4",
-        "indexStaking": "0xD1932c328C781AF317D1420b0c4Ca4749A3A593d",
-        "airdrop": "0xB5C89ed04a5650C10fcD586A6593708F0058eeEe"
+        "airdrop": "0xB5C89ed04a5650C10fcD586A6593708F0058eeEe",
+        "lockonVesting": "0x84C9B2acfD604C018B11B5e74e4F2a5DdACbc42E",
+        "indexStaking": "0x24FF9D1f1E9948645786B8b8EAE7a3F430b62093"
     }
 }
