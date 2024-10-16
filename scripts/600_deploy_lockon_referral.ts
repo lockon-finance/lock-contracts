@@ -29,9 +29,9 @@ async function main() {
     [
       ownerAddress,
       envParams.operatorAddress,
-      contracts.lockonVesting,
+      0,
       envParams.stableTokenAddress,
-      contracts.lockToken,
+      0,
       referralTypes,
       vestingCategoryIds,
     ],
