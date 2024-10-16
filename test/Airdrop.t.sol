@@ -39,7 +39,11 @@ contract AirdropTest is Test {
         lockToken.transfer(ACCOUNT_TWO, TEST_ACCOUNT_INITIAL_LOCK_BALANCE);
         airdrop = new Airdrop();
         lockonVesting = new LockonVesting();
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken)));
+        uint256[] memory vestingCategoryIds = new uint256[](1);
+        vestingCategoryIds[0] = 2;
+        uint256[] memory vestingPeriods = new uint256[](1);
+        vestingPeriods[0] = 300 days;
+        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken),vestingCategoryIds, vestingPeriods));
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         deal(OWNER, 100 ether);

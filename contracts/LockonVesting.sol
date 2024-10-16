@@ -170,21 +170,41 @@ contract LockonVesting is
      *
      * @param _owner      Address of the owner of this contract
      * @param _lockToken  Address of the ERC20 LOCK Token
+     * @param _categoryIds The new category id list
+     * @param _vestingPeriods The new vesting period list
      */
-    function initialize(address _owner, address _lockToken) external initializer {
+    function initialize(
+        address _owner,
+        address _lockToken,
+        uint256[] memory _categoryIds,
+        uint256[] memory _vestingPeriods
+    ) external initializer {
         require(_owner != address(0), "LOCKON Vesting: owner is the zero address");
         require(_lockToken != address(0), "LOCKON Vesting: lockToken is the zero address");
+        require(
+            _categoryIds.length == _vestingPeriods.length,
+            "LOCKON Vesting: categoryIds and vestingPeriods length mismatch"
+        );
+
         // Initialize Ownable lib and set the owner
         __Ownable_init_unchained(_owner);
         __UUPSUpgradeable_init();
         __Pausable_init();
         __ReentrancyGuard_init();
         lockToken = IERC20(_lockToken);
-        vestingCategories[0] = 300 days; // index 0 represents category LOCK STAKING
-        vestingCategories[2] = 300 days; // index 2 represents category AIRDROP
-        // index 3,4 represents category for INDEX STAKING stake tokens
-        vestingCategories[3] = 300 days;
-        vestingCategories[4] = 300 days;
+
+        // Set vesting categories
+        for (uint256 i = 0; i < _categoryIds.length;) {
+            require(
+                _vestingPeriods[i] > 0,
+                "LOCKON Vesting: Vesting period must be greater than 0"
+            );
+            vestingCategories[_categoryIds[i]] = _vestingPeriods[i];
+
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     /**

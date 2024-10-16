@@ -12,6 +12,8 @@ contract LockonVestingTest is Test {
     LockToken public lockToken;
     ERC1967Proxy tokenProxy;
     ERC1967Proxy lockonVestingProxy;
+    uint256[] vestingCategoryIds;
+    uint256[] vestingPeriods;
     uint256 constant VALIDATOR_PRIVATE_KEY = 123;
     address public constant OWNER = address(bytes20(bytes("OWNER")));
     address public constant ACCOUNT_ONE = address(1);
@@ -30,24 +32,30 @@ contract LockonVestingTest is Test {
         lockToken = LockToken(address(tokenProxy));
         lockonVesting = new LockonVesting();
         deal(OWNER, 100 ether);
+        vestingCategoryIds = new uint256[](2);
+        vestingCategoryIds[0] = 0;
+        vestingCategoryIds[1] = 2;
+        vestingPeriods = new uint256[](2);
+        vestingPeriods[0] = 300 days;
+        vestingPeriods[1] = 300 days;
     }
 
     function initializeVestingContract() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (OWNER, address(lockToken)));
+        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (OWNER, address(lockToken), vestingCategoryIds, vestingPeriods));
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
     }
 
     function test_initialize_fail_owner_zero_address() public {
         vm.expectRevert("LOCKON Vesting: owner is the zero address");
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (address(0), address(lockToken)));
+        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (address(0), address(lockToken), vestingCategoryIds, vestingPeriods));
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
     }
 
     function test_initialize_fail_lock_token_zero_address() public {
         vm.expectRevert("LOCKON Vesting: lockToken is the zero address");
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (OWNER, address(0)));
+        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (OWNER, address(0), vestingCategoryIds, vestingPeriods));
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
     }
@@ -334,13 +342,13 @@ contract LockonVestingTest is Test {
 
     function test__set_vesting_categories() public {
         initializeVestingContract();
-        uint256[] memory vestingCategoryIds = new uint256[](2);
-        vestingCategoryIds[0] = 0;
-        vestingCategoryIds[1] = 2;
-        uint256[] memory vestingCategoryValues = new uint256[](2);
-        vestingCategoryValues[0] = 100 days;
-        vestingCategoryValues[1] = 200 days;
-        lockonVesting.setVestingCategories(vestingCategoryIds, vestingCategoryValues);
+        uint256[] memory updatedVestingCategoryIds = new uint256[](2);
+        updatedVestingCategoryIds[0] = 0;
+        updatedVestingCategoryIds[1] = 2;
+        uint256[] memory updatedVestingCategoryValues = new uint256[](2);
+        updatedVestingCategoryValues[0] = 100 days;
+        updatedVestingCategoryValues[1] = 200 days;
+        lockonVesting.setVestingCategories(updatedVestingCategoryIds, updatedVestingCategoryValues);
         assertEq(lockonVesting.vestingCategories(0), 100 days);
         assertEq(lockonVesting.vestingCategories(1), 0); // no change in data
         assertEq(lockonVesting.vestingCategories(2), 200 days);
@@ -348,15 +356,15 @@ contract LockonVestingTest is Test {
 
     function test__set_vesting_categories_fail() public {
         initializeVestingContract();
-        uint256[] memory vestingCategoryIds = new uint256[](2);
-        vestingCategoryIds[0] = 0;
-        vestingCategoryIds[1] = 2;
-        uint256[] memory vestingCategoryValues = new uint256[](3);
-        vestingCategoryValues[0] = 100 days;
-        vestingCategoryValues[1] = 200 days;
-        vestingCategoryValues[1] = 300 days;
+        uint256[] memory updatedVestingCategoryIds = new uint256[](2);
+        updatedVestingCategoryIds[0] = 0;
+        updatedVestingCategoryIds[1] = 2;
+        uint256[] memory updatedVestingCategoryValues = new uint256[](3);
+        updatedVestingCategoryValues[0] = 100 days;
+        updatedVestingCategoryValues[1] = 200 days;
+        updatedVestingCategoryValues[2] = 300 days;
         vm.expectRevert("LOCKON Vesting: The list for category ID and category value must have equal length");
-        lockonVesting.setVestingCategories(vestingCategoryIds, vestingCategoryValues);
+        lockonVesting.setVestingCategories(updatedVestingCategoryIds, updatedVestingCategoryValues);
     }
 
     function test_pause_and_unpause() public {
@@ -373,4 +381,64 @@ contract LockonVestingTest is Test {
         lockonVesting.unPause();
         lockonVesting.deposit(ACCOUNT_ONE, vestingAmount, 0);
     }
+
+    function test_initialize_fail_different_length() public {
+        uint256[] memory failVestingCategoryIds = new uint256[](2);
+        failVestingCategoryIds[0] = 0;
+        failVestingCategoryIds[1] = 1;
+        uint256[] memory failVestingPeriods = new uint256[](3);
+        failVestingPeriods[0] = 100 days;
+        failVestingPeriods[1] = 200 days;
+        failVestingPeriods[2] = 300 days;
+
+        vm.expectRevert("LOCKON Vesting: categoryIds and vestingPeriods length mismatch");
+        bytes memory lockonVestingData = abi.encodeCall(
+            lockonVesting.initialize,
+            (OWNER, address(lockToken), failVestingCategoryIds, failVestingPeriods)
+        );
+        lockonVestingProxy = new ERC1967Proxy(
+            address(lockonVesting),
+            lockonVestingData
+        );
+    }
+
+    function test_initialize_fail_zero_vesting_period() public {
+        uint256[] memory failVestingCategoryIds = new uint256[](2);
+        failVestingCategoryIds[0] = 0;
+        failVestingCategoryIds[1] = 1;
+        uint256[] memory failVestingPeriods = new uint256[](2);
+        failVestingPeriods[0] = 100 days;
+        failVestingPeriods[1] = 0; // Invalid vesting period
+
+        vm.expectRevert(
+            "LOCKON Vesting: Vesting period must be greater than 0"
+        );
+        bytes memory lockonVestingData = abi.encodeCall(
+            lockonVesting.initialize,
+            (OWNER, address(lockToken), failVestingCategoryIds, failVestingPeriods)
+        );
+        lockonVestingProxy = new ERC1967Proxy(
+            address(lockonVesting),
+            lockonVestingData
+        );
+    }
+
+    function test_initialize_empty_category_id() public {
+        uint256[] memory failVestingCategoryIds = new uint256[](0);
+        uint256[] memory failVestingPeriods = new uint256[](0);
+
+        bytes memory lockonVestingData = abi.encodeCall(
+            lockonVesting.initialize,
+            (OWNER, address(lockToken), failVestingCategoryIds, failVestingPeriods)
+        );
+        lockonVestingProxy = new ERC1967Proxy(
+            address(lockonVesting),
+            lockonVestingData
+        );
+
+        assertEq(lockonVesting.vestingCategories(0), 0);
+        assertEq(lockonVesting.vestingCategories(1), 0);
+        assertEq(lockonVesting.vestingCategories(2), 0);
+    }
+
 }

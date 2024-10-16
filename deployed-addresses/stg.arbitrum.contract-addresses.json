@@ -1,0 +1,8 @@
+{
+    "arbitrum": {
+        "lockToken": "0xE1ad529103870fCb4BFe7Ba43C6228013A902e33",
+        "lockonVesting": "0x20d8eE299893eDab1f811484521fe05038141143",
+        "mockToken": "0x36A9220aB15Dfd0a12035A38aca9F6600fF82820",
+        "lockonReferral": "0x4E2A33Cc5C4E85886378540eF3CFB6825C886C46"
+    }
+}

@@ -12,6 +12,7 @@ const privateKey = process.env.PRIVATE_KEY as any;
 const infuraKey = process.env.INFURA_KEY as any;
 const alchemyKey = process.env.ALCHEMY_KEY as any;
 const polygonApiKey = process.env.POLYGON_API_KEY as any;
+const arbitrumApiKey = process.env.ARBITRUM_API_KEY as any;
 const ethereumApiKey = process.env.ETHEREUM_API_KEY as any;
 
 const config: HardhatUserConfig = {
@@ -61,8 +62,15 @@ const config: HardhatUserConfig = {
     },
     polygon: {
       chainId: 137,
-      gasPrice: 140000000000,
+      gasPrice: "auto",
       url: `https://polygon-rpc.com/`,
+      accounts: [privateKey],
+      timeout: 20000,
+    },
+    arbitrum: {
+      chainId: 42161,
+      gasPrice: "auto",
+      url: `https://arb1.arbitrum.io/rpc`,
       accounts: [privateKey],
       timeout: 20000,
     },
@@ -73,6 +81,7 @@ const config: HardhatUserConfig = {
       sepolia: ethereumApiKey,
       polygonMumbai: polygonApiKey,
       polygon: polygonApiKey,
+      arbitrumOne: arbitrumApiKey,
     },
   },
   contractSizer: {

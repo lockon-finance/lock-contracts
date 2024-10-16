@@ -18,6 +18,8 @@ contract LockStakingTest is Test {
     ERC1967Proxy tokenProxy;
     ERC1967Proxy lockonVestingProxy;
     ERC1967Proxy lockStakingProxy;
+    uint256[] vestingCategoryIds;
+    uint256[] vestingPeriods;
     uint256 constant VALIDATOR_PRIVATE_KEY = 123;
     address public constant OWNER = address(bytes20(bytes("OWNER")));
     address public constant ACCOUNT_ONE = address(1);
@@ -42,10 +44,14 @@ contract LockStakingTest is Test {
         lockStaking = new LockStaking();
         lockonVesting = new LockonVesting();
         deal(OWNER, 100 ether);
+        vestingCategoryIds = new uint256[](1);
+        vestingCategoryIds[0] = 0;
+        vestingPeriods = new uint256[](1);
+        vestingPeriods[0] = 300 days;
     }
 
     function initializeAndConfig() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken)));
+        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), vestingCategoryIds, vestingPeriods));
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         bytes memory lockStakingData = abi.encodeCall(
@@ -259,7 +265,7 @@ contract LockStakingTest is Test {
     }
 
     function test_add_lock_token_fail() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken)));
+        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), vestingCategoryIds, vestingPeriods));
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         bytes memory lockStakingData = abi.encodeCall(
@@ -455,7 +461,7 @@ contract LockStakingTest is Test {
     }
 
     function test_set_validator_fail() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken)));
+        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), vestingCategoryIds, vestingPeriods));
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         bytes memory lockStakingData = abi.encodeCall(
@@ -662,7 +668,7 @@ contract LockStakingTest is Test {
     }
 
     function test_revert_on_deposit_vesting() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken)));
+        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), vestingCategoryIds, vestingPeriods));
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         bytes memory lockStakingData = abi.encodeCall(

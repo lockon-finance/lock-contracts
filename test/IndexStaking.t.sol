@@ -58,7 +58,13 @@ contract IndexStakingTest is Test {
         tokenProxy = new ERC1967Proxy(address(lockToken), tokenData);
         lockToken = LockToken(address(tokenProxy));
         lockonVesting = new LockonVesting();
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (OWNER, address(lockToken)));
+        uint256[] memory vestingCategoryIds = new uint256[](2);
+        vestingCategoryIds[0] = 3;
+        vestingCategoryIds[1] = 4;
+        uint256[] memory vestingPeriods = new uint256[](2);
+        vestingPeriods[0] = 300 days;
+        vestingPeriods[1] = 300 days;
+        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (OWNER, address(lockToken),vestingCategoryIds, vestingPeriods));
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         indexStaking = new IndexStaking();

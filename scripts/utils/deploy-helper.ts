@@ -22,6 +22,8 @@ export function getEnvParams() {
   const feeReceiverAddress = getEnvRequired("FEE_RECEIVER_ADDRESS")
   const initialIndexTokenAddresses = getEnvRequired("INITIAL_INDEX_TOKEN_ADDRESSES")
   const initialIndexTokenVestingCategoryIds = getEnvRequired("INITIAL_INDEX_TOKEN_VESTING_CATEGORY_IDS")
+  const stableTokenAddress = getEnvRequired("STABLE_TOKEN_ADDRESS")
+  const ownerAddress = getEnvRequired("OWNER_ADDRESS")
 
   const initialIndexTokenAddressArray = initialIndexTokenAddresses.split(",");
   const initialIndexTokenVestingCategoryIdArray = initialIndexTokenVestingCategoryIds.split(",");
@@ -37,6 +39,8 @@ export function getEnvParams() {
     feeReceiverAddress,
     initialIndexTokenAddresses: initialIndexTokenAddressArray,
     initialIndexTokenVestingCategoryIds: initialIndexTokenVestingCategoryIdArray,
+    stableTokenAddress,
+    ownerAddress
   }
 }
 
