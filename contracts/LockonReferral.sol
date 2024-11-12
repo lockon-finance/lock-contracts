@@ -326,14 +326,6 @@ contract LockonReferral is
     ) external whenNotPaused {
         require(!isRequestIdProcessed[_requestId], "LOCKON Referral: Request already processed");
 
-        require(referralTypeToVestingCategoryId[_referralType] != 0, "LOCKON Referral: _referralType not supported");
-
-        require(_tokenAddress != address(0), "LOCKON Referral: _tokenAddress is the zero address");
-
-        require(isValidRewardToken(_tokenAddress), "LOCKON Referral: _tokenAddress not supported");
-
-        require(_rewardAmount > 0, "LOCKON Referral: _rewardAmount must be greater than Zero");
-
         // Verify the signature to ensure the validity of the cancellation
         require(
             getSignerForRequest(_requestId, msg.sender, _tokenAddress, _rewardAmount, _referralType, _signature)
@@ -372,7 +364,7 @@ contract LockonReferral is
      */
     function setReferralTypeToVestingCategoryId(bytes32 _referralType, uint256 _vestingCategoryId) external onlyOwner {
         require(_referralType != "", "LOCKON Referral: _referralType is empty not allowed");
-        
+
         referralTypeToVestingCategoryId[_referralType] = _vestingCategoryId;
         if (_vestingCategoryId == 0) {
             emit ReferralTypeToVestingCategoryIdDeleted(_referralType, _vestingCategoryId);

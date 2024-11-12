@@ -2,11 +2,11 @@
 pragma solidity 0.8.23;
 
 /**
- * @title LockReferralSigUtil
+ * @title LockonReferralSigUtil
  * @author LOCKON
  * @notice Claim signature for LOCK referral
  */
-contract LockReferralSigUtil {
+contract LockonReferralSigUtil {
     bytes32 internal immutable DOMAIN_SEPARATOR;
 
     constructor(bytes32 _DOMAIN_SEPARATOR) {

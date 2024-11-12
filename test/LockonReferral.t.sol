@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {LockonReferral} from "../contracts/LockonReferral.sol";
 import {LockonVesting} from "../contracts/LockonVesting.sol";
 import {LockToken} from "../contracts/LockToken.sol";
-import {LockReferralSigUtil} from "./LockReferralSigUtil.sol";
+import {LockonReferralSigUtil} from "./LockonReferralSigUtil.sol";
 import {MockToken} from "../contracts/MockToken.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -24,7 +24,7 @@ contract LockonReferralTest is Test {
     MockToken public stableToken;
     LockToken public lockToken;
     LockonVesting public lockonVesting;
-    LockReferralSigUtil internal sigUtils;
+    LockonReferralSigUtil internal sigUtils;
     ERC1967Proxy stableTokenProxy;
     ERC1967Proxy lockTokenProxy;
     ERC1967Proxy referralProxy;
@@ -94,7 +94,7 @@ contract LockonReferralTest is Test {
         );
         referralProxy = new ERC1967Proxy(address(referral), referralData);
         referral = LockonReferral(address(referralProxy));
-        sigUtils = new LockReferralSigUtil(referral.getDomainSeparator());
+        sigUtils = new LockonReferralSigUtil(referral.getDomainSeparator());
         // Transfer LOCK token to contract for reward distribution
         lockToken.transfer(address(referral), 100000 ether);
 
@@ -109,11 +109,43 @@ contract LockonReferralTest is Test {
         lockonVesting.addAddressDepositPermission(address(referral));
     }
 
-    /// @notice V、R、S値から署名バイト列を生成するヘルパー関数
-    function getSignatureFromVRS(uint8 v, bytes32 r, bytes32 s) internal pure returns (bytes memory) {
-        // v ++ (length(r) + 0x80 ) ++ r ++ (length(s) + 0x80) ++ s
-        // v ++ r ++ s
+    /**
+     * @notice Generates a signature from r, s, v values
+     * @dev Signature is concatenated in the order of r ++ s ++ v
+     * @param r r parameter of the signature
+     * @param s s parameter of the signature
+     * @param v Recovery ID of the signature
+     * @return bytes The generated signature
+     */
+    function getSignatureFromRSV(bytes32 r, bytes32 s, uint8 v) internal pure returns (bytes memory) {
         return abi.encodePacked(r, s, v);
+    }
+
+    /// @notice Helper function to create and sign a claim request
+    /// @param requestId Unique identifier for the request
+    /// @param beneficiary Address of the beneficiary
+    /// @param tokenAddress Address of the token being claimed
+    /// @param rewardAmount Amount of tokens to be claimed
+    /// @param referralType Type of referral (e.g., "investor", "affiliate")
+    /// @return Signature bytes for the claim request
+    function createAndSignRequest(
+        bytes32 requestId,
+        address beneficiary,
+        address tokenAddress,
+        uint256 rewardAmount,
+        bytes32 referralType
+    ) private returns (bytes memory) {
+        LockonReferralSigUtil.ClaimRequest memory request = LockonReferralSigUtil.ClaimRequest({
+            requestId: requestId,
+            beneficiary: beneficiary,
+            tokenAddress: tokenAddress,
+            rewardAmount: rewardAmount,
+            referralType: referralType
+        });
+
+        bytes32 digest = sigUtils.getTypedDataHash(request);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
+        return getSignatureFromRSV(r, s, v);
     }
 
     function test_initialize_fail_owner_zero_address() public {
@@ -467,21 +499,22 @@ contract LockonReferralTest is Test {
         initializeAndConfig();
         uint256 rewardAmount = 10 ether;
         bytes32 requestId = "referralClaimOrder#2";
-        LockReferralSigUtil.ClaimRequest memory claimRequest = LockReferralSigUtil.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            tokenAddress: address(lockToken),
-            rewardAmount: rewardAmount,
-            referralType: "investor"
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
+        bytes memory signature = createAndSignRequest(
+            requestId,
+            ACCOUNT_ONE,
+            address(lockToken),
+            rewardAmount,
+            "investor"
+        );
 
-        bytes memory signature = getSignatureFromVRS(v, r, s);
-        // Using account one with generated signature
         vm.startPrank(ACCOUNT_ONE);
         address signer = referral.getSignerForRequest(
-            requestId, ACCOUNT_ONE, address(lockToken), rewardAmount, "investor", signature
+            requestId,
+            ACCOUNT_ONE,
+            address(lockToken),
+            rewardAmount,
+            "investor",
+            signature
         );
         assertEq(signer, validator);
     }
@@ -489,21 +522,23 @@ contract LockonReferralTest is Test {
     function test_get_signer_for_cancel_request() public {
         initializeAndConfig();
         bytes32 requestId = "referralClaimOrder#2";
-        LockReferralSigUtil.ClaimRequest memory claimRequest = LockReferralSigUtil.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            tokenAddress: address(lockToken),
-            rewardAmount: 1,
-            referralType: "investor"
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
+        bytes memory signature = createAndSignRequest(
+            requestId,
+            ACCOUNT_ONE,
+            address(lockToken),
+            1,
+            "investor"
+        );
 
-        bytes memory signature = getSignatureFromVRS(v, r, s);
-        // Using account one with generated signature
         vm.startPrank(ACCOUNT_ONE);
-        address signer =
-            referral.getSignerForRequest(requestId, ACCOUNT_ONE, address(lockToken), 1, "investor", signature);
+        address signer = referral.getSignerForRequest(
+            requestId,
+            ACCOUNT_ONE,
+            address(lockToken),
+            1,
+            "investor",
+            signature
+        );
         assertEq(signer, validator);
     }
 
@@ -518,16 +553,13 @@ contract LockonReferralTest is Test {
         vm.startPrank(ACCOUNT_ONE);
         uint256 rewardAmount = 20 ether;
         bytes32 requestId = "referralClaimOrder#1";
-        LockReferralSigUtil.ClaimRequest memory claimRequest = LockReferralSigUtil.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            tokenAddress: address(stableToken),
-            rewardAmount: rewardAmount,
-            referralType: referralType
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-        bytes memory signature = getSignatureFromVRS(v, r, s);
+        bytes memory signature = createAndSignRequest(
+            requestId,
+            ACCOUNT_ONE,
+            address(stableToken),
+            rewardAmount,
+            referralType
+        );
         vm.expectRevert(EnforcedPause.selector);
         referral.claimPendingReward(requestId, address(stableToken), rewardAmount, referralType, signature);
         vm.stopPrank();
@@ -606,21 +638,18 @@ contract LockonReferralTest is Test {
         referral = LockonReferral(address(referralProxy));
         bytes32 referralType = bytes32("investor");
         referral.setReferralTypeToVestingCategoryId(referralType, 10000);
-        sigUtils = new LockReferralSigUtil(referral.getDomainSeparator());
+        sigUtils = new LockonReferralSigUtil(referral.getDomainSeparator());
 
         // Initalize signature for claim reward
         uint256 rewardAmount = 20 ether;
         bytes32 requestId = "referralClaimOrder#1";
-        LockReferralSigUtil.ClaimRequest memory claimRequest = LockReferralSigUtil.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            tokenAddress: address(lockToken),
-            rewardAmount: rewardAmount,
-            referralType: referralType
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-        bytes memory signature = getSignatureFromVRS(v, r, s);
+        bytes memory signature = createAndSignRequest(
+            requestId,
+            ACCOUNT_ONE,
+            address(lockToken),
+            rewardAmount,
+            referralType
+        );
         // Transfer LOCK token to contract for reward distribution
         lockToken.transfer(address(referral), 100000 ether);
         // Using account one
@@ -644,19 +673,17 @@ contract LockonReferralTest is Test {
         referral.setLockonVesting(address(lockonVesting));
         bytes32 referralType = bytes32("investor");
         referral.setReferralTypeToVestingCategoryId(referralType, 10000);
+
         uint256 rewardAmount = 20 ether;
         bytes32 requestId = bytes32("referralClaimOrder#1");
-        LockReferralSigUtil.ClaimRequest memory claimRequest = LockReferralSigUtil.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            tokenAddress: address(lockToken),
-            rewardAmount: rewardAmount,
-            referralType: referralType
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-        bytes memory signature = getSignatureFromVRS(v, r, s);
-        // Using account one with generated signature from validator address to claim reward
+        bytes memory signature = createAndSignRequest(
+            requestId,
+            ACCOUNT_ONE,
+            address(lockToken),
+            rewardAmount,
+            referralType
+        );
+
         vm.startPrank(ACCOUNT_ONE);
         uint256 lockonVestingBalanceBefore = lockToken.balanceOf(address(lockonVesting));
         vm.recordLogs();
@@ -674,17 +701,14 @@ contract LockonReferralTest is Test {
         referral.setReferralTypeToVestingCategoryId(referralType, 10001);
         uint256 rewardAmount = 20 ether;
         bytes32 requestId = bytes32("referralClaimOrder#1");
-        LockReferralSigUtil.ClaimRequest memory claimRequest = LockReferralSigUtil.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            tokenAddress: address(stableToken),
-            rewardAmount: rewardAmount,
-            referralType: referralType
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-        bytes memory signature = getSignatureFromVRS(v, r, s);
-        // Using account one with generated signature from validator address to claim reward
+        bytes memory signature = createAndSignRequest(
+            requestId,
+            ACCOUNT_ONE,
+            address(stableToken),
+            rewardAmount,
+            referralType
+        );
+
         vm.startPrank(ACCOUNT_ONE);
         uint256 accountOneBalanceBefore = stableToken.balanceOf(ACCOUNT_ONE);
         vm.recordLogs();
@@ -709,17 +733,14 @@ contract LockonReferralTest is Test {
 
         uint256 rewardAmount = 20 ether;
         bytes32 requestId = "referralClaimOrder#1";
-        LockReferralSigUtil.ClaimRequest memory claimRequest = LockReferralSigUtil.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            tokenAddress: address(lockToken),
-            rewardAmount: rewardAmount,
-            referralType: referralType
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-        bytes memory signature = getSignatureFromVRS(v, r, s);
-        // Using account one with generated signature from validator address to claim reward
+        bytes memory signature = createAndSignRequest(
+            requestId,
+            ACCOUNT_ONE,
+            address(lockToken),
+            rewardAmount,
+            referralType
+        );
+
         vm.startPrank(ACCOUNT_ONE);
         vm.expectRevert("LOCKON Referral: _tokenAddress not supported");
         referral.claimPendingReward(requestId, address(lockToken), rewardAmount, referralType, signature);
@@ -772,17 +793,14 @@ contract LockonReferralTest is Test {
 
         uint256 rewardAmount = 20 ether;
         bytes32 requestId = "referralClaimOrder#1";
-        LockReferralSigUtil.ClaimRequest memory claimRequest = LockReferralSigUtil.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            tokenAddress: address(stableToken),
-            rewardAmount: rewardAmount,
-            referralType: referralType
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-        bytes memory signature = getSignatureFromVRS(v, r, s);
-        // Using account one with generated signature from validator address to claim reward
+        bytes memory signature = createAndSignRequest(
+            requestId,
+            ACCOUNT_ONE,
+            address(stableToken),
+            rewardAmount,
+            referralType
+        );
+
         vm.startPrank(ACCOUNT_ONE);
         vm.expectRevert("LOCKON Referral: _tokenAddress not supported");
         referral.claimPendingReward(requestId, address(lockToken), rewardAmount, referralType, signature);
@@ -817,34 +835,110 @@ contract LockonReferralTest is Test {
         referral.claimPendingReward(requestId, address(stableToken), rewardAmount, referralType, signature);
     }
 
-    function test_cancel_claim_order() public {
+
+    function test_cancel_claim_order_normal_case() public {
         initializeAndConfig();
         vm.startPrank(OWNER);
         bytes32 referralType = bytes32("investor");
         referral.setReferralTypeToVestingCategoryId(referralType, 10001);
         referral.setLockTokenAddress(address(lockToken));
         uint256 rewardAmount = 1 ether;
-        bytes32 requestId = bytes32(("cancelClaimOrder#1"));
-        LockReferralSigUtil.ClaimRequest memory claimRequest = LockReferralSigUtil.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            tokenAddress: address(lockToken),
-            rewardAmount: rewardAmount,
-            referralType: referralType
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
 
-        bytes memory signature = getSignatureFromVRS(v, r, s);
-        // Using account one with generated signature
+        bytes32 requestId = keccak256(abi.encodePacked("cancelClaimOrder#1"));
         vm.startPrank(ACCOUNT_ONE);
         vm.recordLogs();
+
+        bytes memory signature = createAndSignRequest(
+            requestId, ACCOUNT_ONE, address(lockToken), rewardAmount, referralType
+        );
         referral.cancelClaimOrder(requestId, address(lockToken), rewardAmount, referralType, signature);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-        assertEq(entries[0].topics[0], keccak256("ClaimOrderCanceled(address,bytes32,address,uint256,bytes32)"));
-        // Make sure that the requestId cannot be claimed after cancel
+
+        // Verify that a cancelled request cannot be claimed
         vm.expectRevert("LOCKON Referral: Request already processed");
         referral.claimPendingReward(requestId, address(lockToken), rewardAmount, referralType, signature);
+
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        assertEq(entries[0].topics[0], keccak256("ClaimOrderCanceled(address,bytes32,address,uint256,bytes32)"));
+        vm.stopPrank();
+    }
+
+    function test_cancel_claim_order_unsupported_token() public {
+        initializeAndConfig();
+        vm.startPrank(OWNER);
+        bytes32 referralType = bytes32("investor");
+        referral.setReferralTypeToVestingCategoryId(referralType, 10001);
+        referral.setLockTokenAddress(address(lockToken));
+        uint256 rewardAmount = 1 ether;
+
+        bytes32 requestId = keccak256(abi.encodePacked("cancelClaimOrder#2"));
+        vm.startPrank(ACCOUNT_ONE);
+        vm.recordLogs();
+
+        bytes memory signature = createAndSignRequest(
+            requestId, ACCOUNT_ONE, address(0), rewardAmount, referralType
+        );
+        referral.cancelClaimOrder(requestId, address(0), rewardAmount, referralType, signature);
+
+        // Verify that a cancelled request cannot be claimed
+        vm.expectRevert("LOCKON Referral: Request already processed");
+        referral.claimPendingReward(requestId, address(lockToken), rewardAmount, referralType, signature);
+
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        assertEq(entries[0].topics[0], keccak256("ClaimOrderCanceled(address,bytes32,address,uint256,bytes32)"));
+        vm.stopPrank();
+    }
+
+    function test_cancel_claim_order_unsupported_type() public {
+        initializeAndConfig();
+        vm.startPrank(OWNER);
+        bytes32 referralType = bytes32("investor");
+        referral.setReferralTypeToVestingCategoryId(referralType, 10001);
+        referral.setLockTokenAddress(address(lockToken));
+        uint256 rewardAmount = 1 ether;
+
+        bytes32 requestId = keccak256(abi.encodePacked("cancelClaimOrder#3"));
+        vm.startPrank(ACCOUNT_ONE);
+        vm.recordLogs();
+
+        bytes32 unsupportedType = bytes32("unsupported_type");
+        bytes memory signature = createAndSignRequest(
+            requestId, ACCOUNT_ONE, address(lockToken), rewardAmount, unsupportedType
+        );
+        referral.cancelClaimOrder(requestId, address(lockToken), rewardAmount, unsupportedType, signature);
+
+        // Verify that a cancelled request cannot be claimed
+        vm.expectRevert("LOCKON Referral: Request already processed");
+        referral.claimPendingReward(requestId, address(lockToken), rewardAmount, referralType, signature);
+
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        assertEq(entries[0].topics[0], keccak256("ClaimOrderCanceled(address,bytes32,address,uint256,bytes32)"));
+        vm.stopPrank();
+    }
+
+    function test_cancel_claim_order_zero_amount() public {
+        initializeAndConfig();
+        vm.startPrank(OWNER);
+        bytes32 referralType = bytes32("investor");
+        referral.setReferralTypeToVestingCategoryId(referralType, 10001);
+        referral.setLockTokenAddress(address(lockToken));
+        uint256 rewardAmount = 1 ether;
+
+        bytes32 requestId = keccak256(abi.encodePacked("cancelClaimOrder#4"));
+        vm.startPrank(ACCOUNT_ONE);
+        vm.recordLogs();
+
+        bytes memory signature = createAndSignRequest(
+            requestId, ACCOUNT_ONE, address(lockToken), 0, referralType
+        );
+        referral.cancelClaimOrder(requestId, address(lockToken), 0, referralType, signature);
+
+        // Verify that a cancelled request cannot be claimed
+        vm.expectRevert("LOCKON Referral: Request already processed");
+        referral.claimPendingReward(requestId, address(lockToken), rewardAmount, referralType, signature);
+
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        assertEq(entries[0].topics[0], keccak256("ClaimOrderCanceled(address,bytes32,address,uint256,bytes32)"));
+        vm.stopPrank();
     }
 
     function test_cancel_claim_order_fail() public {
@@ -854,37 +948,20 @@ contract LockonReferralTest is Test {
         referral.setReferralTypeToVestingCategoryId(referralType, 10001);
         bytes32 requestId = "referralClaimOrder#1";
         uint256 rewardAmount = 1 ether;
-        LockReferralSigUtil.ClaimRequest memory claimRequest = LockReferralSigUtil.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            tokenAddress: address(stableToken),
-            rewardAmount: rewardAmount,
-            referralType: referralType
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
 
-        bytes memory signature = getSignatureFromVRS(v, r, s);
-        // Account two using signature that is generated for account one
+        bytes memory signature = createAndSignRequest(
+            requestId,
+            ACCOUNT_ONE,
+            address(stableToken),
+            rewardAmount,
+            referralType
+        );
 
         vm.startPrank(ACCOUNT_ONE);
-        vm.expectRevert("LOCKON Referral: _tokenAddress not supported");
-        referral.cancelClaimOrder(requestId, address(lockToken), rewardAmount, referralType, signature);
-
         vm.expectRevert("LOCKON Referral: Invalid signature");
         referral.cancelClaimOrder(requestId, address(stableToken), rewardAmount + 1, referralType, signature);
 
-        vm.expectRevert("LOCKON Referral: _referralType not supported");
-        referral.cancelClaimOrder(requestId, address(stableToken), rewardAmount + 1, "a", signature);
-
-        vm.expectRevert("LOCKON Referral: _tokenAddress is the zero address");
-        referral.cancelClaimOrder(requestId, address(0), rewardAmount, referralType, signature);
-
-        vm.expectRevert("LOCKON Referral: _rewardAmount must be greater than Zero");
-        referral.cancelClaimOrder(requestId, address(stableToken), 0, referralType, signature);
-
-        // Reward that already claimed cannot be cancelled
-        vm.startPrank(ACCOUNT_ONE);
+        // Case with cancelled request
         referral.cancelClaimOrder(requestId, address(stableToken), rewardAmount, referralType, signature);
         vm.expectRevert("LOCKON Referral: Request already processed");
         referral.cancelClaimOrder(requestId, address(stableToken), rewardAmount, referralType, signature);

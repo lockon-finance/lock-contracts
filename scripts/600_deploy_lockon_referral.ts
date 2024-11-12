@@ -24,18 +24,19 @@ async function main() {
    encodeBytes32String("special"),
   ];
   const vestingCategoryIds = [10000, 10001, 10002];
+  const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
   const lockonReferral = await defender.deployProxy(
     LockonReferral,
     [
       ownerAddress,
       envParams.operatorAddress,
-      0,
+      ZERO_ADDRESS,
       envParams.stableTokenAddress,
-      0,
+      ZERO_ADDRESS,
       referralTypes,
       vestingCategoryIds,
     ],
-    { initializer: "initialize", kind: "uups" }
+    { initializer: 'initialize', kind: 'uups' }
   );
 
   await lockonReferral.waitForDeployment();
