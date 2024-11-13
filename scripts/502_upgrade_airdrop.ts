@@ -1,6 +1,6 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import {getContracts, validateDefenderUpgradeApprovalOwnerAddress} from "./utils/deploy-helper";
+import { getContracts, validateDefenderUpgradeApprovalOwnerAddress } from "./utils/deploy-helper";
 
 async function main() {
   const contracts = getContracts(network.name)[network.name];
@@ -13,7 +13,7 @@ async function main() {
   console.log(`Airdrop Upgrade proposed with URL: ${proposal.url}`);
 }
 
-main().catch((error) => {
+main().catch(error => {
   console.error(error);
   process.exitCode = 1;
 });

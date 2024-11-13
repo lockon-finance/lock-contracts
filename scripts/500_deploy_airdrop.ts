@@ -1,6 +1,6 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import {getContracts, saveContract, getDefenderUpgradeApprovalOwnerAddress} from "./utils/deploy-helper";
+import { getContracts, saveContract, getDefenderUpgradeApprovalOwnerAddress } from "./utils/deploy-helper";
 
 async function main() {
   const contracts = getContracts(network.name)[network.name];
@@ -23,7 +23,7 @@ async function main() {
     {
       initializer: "initialize",
       kind: "uups",
-    }
+    },
   );
   await airdrop.waitForDeployment();
   const airdropAddr = await airdrop.getAddress();
@@ -33,7 +33,7 @@ async function main() {
   console.log("Note: Set operatorAddress with addDistributePermission.");
 }
 
-main().catch((error) => {
+main().catch(error => {
   console.error(error);
   process.exitCode = 1;
 });

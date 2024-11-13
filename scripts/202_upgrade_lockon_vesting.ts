@@ -1,6 +1,6 @@
 import { ethers, network, run, defender } from "hardhat";
 
-import {getContracts, getEnvParams, validateDefenderUpgradeApprovalOwnerAddress} from "./utils/deploy-helper";
+import { getContracts, getEnvParams, validateDefenderUpgradeApprovalOwnerAddress } from "./utils/deploy-helper";
 
 async function main() {
   const envParams = getEnvParams();
@@ -14,7 +14,7 @@ async function main() {
   console.log(`Lockon Vesting Upgrade proposed with URL: ${proposal.url}`);
 }
 
-main().catch((error) => {
+main().catch(error => {
   console.error(error);
   process.exitCode = 1;
 });
