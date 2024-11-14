@@ -18,6 +18,12 @@
       "txHash": "0x0c6661bc4108f1c23fb0ed69a65df325d178425d1bc697e47b49e9795b1c5787",
       "remoteDeploymentId": "bd132597-5899-469e-b4b4-fb1e9317cc2c",
       "kind": "uups"
+    },
+    {
+      "address": "0x30860E1e5558Fc03CED38dB91B2371444D428759",
+      "txHash": "0xa4e1b46565e33932a0fcfbf05b6a883e3a6d7183966681998825382a4bbafc73",
+      "remoteDeploymentId": "4ece985b-ba81-4ed4-a9b3-b9588cd9b2b9",
+      "kind": "uups"
     }
   ],
   "impls": {

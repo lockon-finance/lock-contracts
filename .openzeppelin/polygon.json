@@ -65,6 +65,12 @@
       "address": "0x6ACFfC2251FC94f65fB6d0625cB40B022889EEF6",
       "txHash": "0x00f08e37278e9f9a9e854c50530904cbe1c82b07dfc497b5294442f7aa008820",
       "kind": "uups"
+    },
+    {
+      "address": "0x4D71F807DFC1CadBB325A46314fC50adc1d9a988",
+      "txHash": "0xd4e9dd336fe4455ee9c1fb3a557891b10eb2bd7719ddb95dbddb38a6360ef2fb",
+      "remoteDeploymentId": "200b3d59-24df-4c2e-984e-5060ebe17f51",
+      "kind": "uups"
     }
   ],
   "impls": {
