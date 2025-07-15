@@ -33,7 +33,7 @@
     "@typechain/hardhat": "^9.1.0",
     "@types/chai": "^4.3.11",
     "@types/mocha": "10.0.6",
-    "@types/node": "^20.11.16",
+    "@types/node": "^22.16.5",
     "@typescript-eslint/eslint-plugin": "^8.14.0",
     "@typescript-eslint/parser": "^8.14.0",
     "chai": "^4.4.1",
@@ -54,7 +54,7 @@
     "typescript": "^5.3.3"
   },
   "volta": {
-    "node": "18.19.1",
+    "node": "22.17.1",
     "yarn": "1.22.22"
   }
 }

@@ -11,9 +11,7 @@ dotenv.config();
 const privateKey = process.env.PRIVATE_KEY as any;
 const infuraKey = process.env.INFURA_KEY as any;
 const alchemyKey = process.env.ALCHEMY_KEY as any;
-const polygonApiKey = process.env.POLYGON_API_KEY as any;
-const arbitrumApiKey = process.env.ARBITRUM_API_KEY as any;
-const ethereumApiKey = process.env.ETHEREUM_API_KEY as any;
+const etherscanApiKey = process.env.ETHERSCAN_API_KEY as any;
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -76,13 +74,7 @@ const config: HardhatUserConfig = {
     },
   },
   etherscan: {
-    apiKey: {
-      goerli: ethereumApiKey,
-      sepolia: ethereumApiKey,
-      polygonMumbai: polygonApiKey,
-      polygon: polygonApiKey,
-      arbitrumOne: arbitrumApiKey,
-    },
+    apiKey: etherscanApiKey
   },
   contractSizer: {
     alphaSort: true,
