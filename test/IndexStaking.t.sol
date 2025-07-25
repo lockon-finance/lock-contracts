@@ -112,6 +112,23 @@ contract IndexStakingTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
+    function getClaimSignature(
+        string memory requestId,
+        address beneficiary,
+        address stakeToken,
+        uint256 claimAmount
+    ) internal view returns (bytes memory) {
+        IndexSigUtils.ClaimRequest memory claimRequest = IndexSigUtils.ClaimRequest({
+            requestId: requestId,
+            beneficiary: beneficiary,
+            stakeToken: stakeToken,
+            claimAmount: claimAmount
+        });
+        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
+        return getSignatureFromVRS(v, r, s);
+    }
+
     function test_initialize_fail_zero_address() public {
         IndexStaking.InitPoolInfo memory firstPoolInfo =
             IndexStaking.InitPoolInfo(IERC20(address(0)), 2300, block.timestamp, 3);
@@ -446,15 +463,7 @@ contract IndexStakingTest is Test {
         uint256 stakeAmount = 10 ether;
         uint256 claimAmount = 1 ether;
         string memory requestId = "indexStakingClaimOrder#1";
-        IndexSigUtils.ClaimRequest memory claimRequest = IndexSigUtils.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            stakeToken: address(lpiToken),
-            claimAmount: claimAmount
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-        bytes memory signature = getSignatureFromVRS(v, r, s);
+        bytes memory signature = getClaimSignature(requestId, ACCOUNT_ONE, address(lpiToken), claimAmount);
         // Using account one with generated signature from VALIDATOR address to claim staking reward
         vm.startPrank(ACCOUNT_ONE);
         lpiToken.approve(address(indexStaking), stakeAmount * 2);
@@ -476,31 +485,8 @@ contract IndexStakingTest is Test {
         initializeAndConfig();
         uint256 stakeAmount = 10 ether;
         uint256 claimAmount = 1 ether;
-        uint256 invalidAmount = 100001 ether;
         string memory requestId = "indexStakingClaimOrder#1";
-        // With valid amount
-        IndexSigUtils.ClaimRequest memory validClaimRequest = IndexSigUtils.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            stakeToken: address(lpiToken),
-            claimAmount: claimAmount
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(validClaimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-
-        bytes memory signatureWithValidAmount = getSignatureFromVRS(v, r, s);
-
-        //with invalid amount
-        IndexSigUtils.ClaimRequest memory invalidCancelClaimRequest = IndexSigUtils.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            stakeToken: address(lpiToken),
-            claimAmount: invalidAmount
-        });
-        digest = sigUtils.getTypedDataHash(invalidCancelClaimRequest);
-        (v, r, s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-
-        bytes memory signatureWithInvalidAmount = getSignatureFromVRS(v, r, s);
+        bytes memory signatureWithValidAmount = getClaimSignature(requestId, ACCOUNT_ONE, address(lpiToken), claimAmount);
         // User not stake any Token but still call to withdraw
         vm.startPrank(ACCOUNT_ONE);
         vm.expectRevert("Index Staking: User hasn't staked any token yet");
@@ -523,13 +509,15 @@ contract IndexStakingTest is Test {
         indexStaking.deposit(address(lpiToken), stakeAmount);
         skip(10 days);
         indexStaking.deposit(address(lpiToken), stakeAmount);
-        // Claim exceed maximum reward amount
-        vm.expectRevert("Index Staking: Claim amount exceed remaining reward");
-        indexStaking.claimIndexStakingReward(requestId, address(lpiToken), invalidAmount, signatureWithInvalidAmount);
         // Prevent double claim
         indexStaking.claimIndexStakingReward(requestId, address(lpiToken), claimAmount, signatureWithValidAmount);
         vm.expectRevert("Index Staking: Request already processed");
         indexStaking.claimIndexStakingReward(requestId, address(lpiToken), claimAmount, signatureWithValidAmount);
+        // Test zero claim amount
+        string memory zeroRequestId = "indexStakingClaimOrder#2";
+        bytes memory zeroSignature = getClaimSignature(zeroRequestId, ACCOUNT_ONE, address(lpiToken), 0);
+        vm.expectRevert("Index Staking: Nothing to claim");
+        indexStaking.claimIndexStakingReward(zeroRequestId, address(lpiToken), 0, zeroSignature);
     }
 
     function test_cancel_claim_order() public {
@@ -537,16 +525,7 @@ contract IndexStakingTest is Test {
         uint256 stakeAmount = 10 ether;
         uint256 claimAmount = 1 ether;
         string memory requestId = "indexStakingClaimOrder#1";
-        IndexSigUtils.ClaimRequest memory claimRequest = IndexSigUtils.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            stakeToken: address(lpiToken),
-            claimAmount: claimAmount
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-
-        bytes memory signature = getSignatureFromVRS(v, r, s);
+        bytes memory signature = getClaimSignature(requestId, ACCOUNT_ONE, address(lpiToken), claimAmount);
         // Using account one with generated signature
         vm.startPrank(ACCOUNT_ONE);
         lpiToken.approve(address(indexStaking), stakeAmount);
@@ -565,16 +544,7 @@ contract IndexStakingTest is Test {
         uint256 stakeAmount = 10 ether;
         uint256 claimAmount = 1 ether;
         string memory requestId = "indexStakingClaimOrder#1";
-        IndexSigUtils.ClaimRequest memory claimRequest = IndexSigUtils.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            stakeToken: address(lpiToken),
-            claimAmount: claimAmount
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-
-        bytes memory signature = getSignatureFromVRS(v, r, s);
+        bytes memory signature = getClaimSignature(requestId, ACCOUNT_ONE, address(lpiToken), claimAmount);
         // User not stake any Lock Token but still call to cancel claim
         vm.startPrank(ACCOUNT_ONE);
         vm.expectRevert("Index Staking: User hasn't staked any token yet");
@@ -858,16 +828,7 @@ contract IndexStakingTest is Test {
         initializeAndConfig();
         uint256 claimAmount = 1 ether;
         string memory requestId = "indexStakingClaimOrder#1";
-        IndexSigUtils.ClaimRequest memory claimRequest = IndexSigUtils.ClaimRequest({
-            requestId: requestId,
-            beneficiary: ACCOUNT_ONE,
-            stakeToken: address(lpiToken),
-            claimAmount: claimAmount
-        });
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-
-        bytes memory signature = getSignatureFromVRS(v, r, s);
+        bytes memory signature = getClaimSignature(requestId, ACCOUNT_ONE, address(lpiToken), claimAmount);
         // Using account one with generated signature
         vm.startPrank(ACCOUNT_ONE);
         lpiToken.approve(address(indexStaking), claimAmount);
@@ -884,5 +845,41 @@ contract IndexStakingTest is Test {
     {
         (uint256 stakedAmount,) = indexStakingContract.userInfo(user, tokenAddress);
         return stakedAmount;
+    }
+
+    function test_claim_reward_when_current_reward_amount_is_exhausted() public {
+        initializeAndConfig();
+        vm.startPrank(OWNER);
+        uint256 stakeAmount = 100 ether;
+        lockToken.transfer(address(indexStaking), 100000 ether);
+        vm.stopPrank();
+        vm.startPrank(ACCOUNT_ONE);
+        lpiToken.approve(address(indexStaking), stakeAmount);
+        indexStaking.deposit(address(lpiToken), stakeAmount);
+        vm.stopPrank();
+
+        uint256 currentRewardAmountBefore = indexStaking.currentRewardAmount();
+        assertEq(currentRewardAmountBefore, 100000 ether);
+
+        // Calculate reward rate and time needed to generate 99.99% of rewards
+        uint256 rewardPerSecond = (100000 ether * 2300) / PRECISION / 2;
+        uint256 targetRewardPercentage = 9999; // 99.99%
+        uint256 targetRewardAmount = currentRewardAmountBefore * targetRewardPercentage / 10000;
+        uint256 skipSeconds = targetRewardAmount / rewardPerSecond;
+        skip(skipSeconds);
+        indexStaking.updatePool(address(lpiToken));
+
+        uint256 generatedReward = rewardPerSecond * skipSeconds;
+        uint256 expectedRemaining = currentRewardAmountBefore - generatedReward;
+        uint256 currentRewardAmountAfter = indexStaking.currentRewardAmount();
+        assertEq(currentRewardAmountAfter, expectedRemaining);
+        assertGt(currentRewardAmountBefore, currentRewardAmountAfter);
+        uint256 claimAmount = 11 ether;
+        string memory requestId = "indexStakingClaimOrder#1";
+        bytes memory signature = getClaimSignature(requestId, ACCOUNT_ONE, address(lpiToken), claimAmount);
+        vm.startPrank(ACCOUNT_ONE);
+        indexStaking.claimIndexStakingReward(requestId, address(lpiToken), claimAmount, signature);
+        vm.stopPrank();
+        assertTrue(indexStaking.isRequestIdProcessed(requestId), "Claim should be processed successfully");
     }
 }

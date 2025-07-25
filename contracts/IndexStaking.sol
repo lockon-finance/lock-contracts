@@ -548,7 +548,7 @@ contract IndexStaking is
         require(pool.stakeToken != IERC20(address(0)), "Index Staking: Pool do not exist");
         require(user.lastStakedTimestamp != 0, "Index Staking: User hasn't staked any token yet");
         require(!isRequestIdProcessed[_requestId], "Index Staking: Request already processed");
-        require(currentRewardAmount >= _claimAmount, "Index Staking: Claim amount exceed remaining reward");
+        require(_claimAmount != 0, "Index Staking: Nothing to claim");
 
         // Verify the signature to ensure the validity of the distribution
         require(
