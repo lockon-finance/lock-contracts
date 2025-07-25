@@ -691,7 +691,7 @@ contract LockStaking is
     {
         UserInfo storage _currentUserInfo = userInfo[msg.sender];
         require(
-            _currentUserInfo.lockScore != 0 || _currentUserInfo.cumulativePendingReward != 0,
+            _currentUserInfo.lockScore != 0 || _currentUserInfo.cumulativePendingReward != 0 || _commissionSharingReward != 0,
             "LOCK Staking: Nothing to claim"
         );
         require(!isRequestIdProcessed[_requestId], "LOCK Staking: Request already processed");

@@ -87,6 +87,20 @@ contract LockStakingTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
+    function getClaimSignature(string memory requestId, address beneficiary, uint256 rewardAmount) internal view returns (bytes memory) {
+        LockSigUtils.ClaimRequest memory claimRequest =
+            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: beneficiary, rewardAmount: rewardAmount});
+        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
+        return getSignatureFromVRS(v, r, s);
+    }
+
+    function setupStakeAndWait() internal {
+        lockToken.approve(address(lockStaking), 10 ether);
+        lockStaking.addLockToken(10 ether, 365 days);
+        skip(365 days);
+    }
+
     function test_initialize_fail_bonus_rate() public {
         vm.expectRevert("LOCK Staking: Bonus rate per second must be greater than 0");
         bytes memory lockStakingData = abi.encodeCall(
@@ -491,11 +505,7 @@ contract LockStakingTest is Test {
         uint256 lockAmountLocal = 10 ether;
         uint256 rewardAmount = 20 ether;
         string memory requestId = "lockStakingClaimOrder#1";
-        LockSigUtils.ClaimRequest memory claimRequest =
-            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: ACCOUNT_ONE, rewardAmount: rewardAmount});
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-        bytes memory signature = getSignatureFromVRS(v, r, s);
+        bytes memory signature = getClaimSignature(requestId, ACCOUNT_ONE, rewardAmount);
         // Using account one with generated signature from validator address to claim reward
         vm.startPrank(ACCOUNT_ONE);
         lockToken.approve(address(lockStaking), lockAmountLocal);
@@ -517,15 +527,9 @@ contract LockStakingTest is Test {
         uint256 lockAmountLocal = 10 ether;
         uint256 rewardAmount = 20 ether;
         string memory requestId = "lockStakingClaimOrder#1";
-        LockSigUtils.ClaimRequest memory claimRequest =
-            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: ACCOUNT_ONE, rewardAmount: rewardAmount});
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-        bytes memory signature = getSignatureFromVRS(v, r, s);
+        bytes memory signature = getClaimSignature(requestId, ACCOUNT_ONE, rewardAmount);
         // Using account one with generated signature from validator address to claim reward
         vm.startPrank(ACCOUNT_ONE);
-        vm.expectRevert("LOCK Staking: Nothing to claim");
-        lockStaking.claimPendingReward(requestId, rewardAmount, signature);
         lockToken.approve(address(lockStaking), lockAmountLocal);
         lockStaking.addLockToken(lockAmountLocal, 100 days);
         skip(100 days);
@@ -692,11 +696,7 @@ contract LockStakingTest is Test {
         // Initalize signature for claim reward
         uint256 rewardAmount = 20 ether;
         string memory requestId = "lockStakingClaimOrder#1";
-        LockSigUtils.ClaimRequest memory claimRequest =
-            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: ACCOUNT_ONE, rewardAmount: rewardAmount});
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-        bytes memory signature = getSignatureFromVRS(v, r, s);
+        bytes memory signature = getClaimSignature(requestId, ACCOUNT_ONE, rewardAmount);
         // Transfer LOCK token to contract for reward distribution
         lockToken.transfer(address(lockStaking), 100000 ether);
         // Using account one
@@ -716,12 +716,7 @@ contract LockStakingTest is Test {
         uint256 stakeAmount = 10 ether;
         uint256 rewardAmount = 1 ether;
         string memory requestId = "lockStakingClaimOrder#1";
-        LockSigUtils.ClaimRequest memory claimRequest =
-            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: ACCOUNT_ONE, rewardAmount: rewardAmount});
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-
-        bytes memory signature = getSignatureFromVRS(v, r, s);
+        bytes memory signature = getClaimSignature(requestId, ACCOUNT_ONE, rewardAmount);
         // Using account one with generated signature
         vm.startPrank(ACCOUNT_ONE);
         lockToken.approve(address(lockStaking), stakeAmount);
@@ -740,12 +735,7 @@ contract LockStakingTest is Test {
         uint256 stakeAmount = 10 ether;
         uint256 rewardAmount = 1 ether;
         string memory requestId = "lockStakingClaimOrder#1";
-        LockSigUtils.ClaimRequest memory claimRequest =
-            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: ACCOUNT_ONE, rewardAmount: rewardAmount});
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-
-        bytes memory signature = getSignatureFromVRS(v, r, s);
+        bytes memory signature = getClaimSignature(requestId, ACCOUNT_ONE, rewardAmount);
         // User not stake any Lock Token but still call to cancel claim
         vm.prank(ACCOUNT_ONE);
         vm.expectRevert("LOCK Staking: User hasn't staked any token yet");
@@ -780,11 +770,7 @@ contract LockStakingTest is Test {
         lockStaking.withdrawLockToken(1);
         uint256 rewardAmount = 20 ether;
         string memory requestId = "indexStakingClaimOrder#1";
-        LockSigUtils.ClaimRequest memory claimRequest =
-            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: ACCOUNT_ONE, rewardAmount: rewardAmount});
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-        bytes memory signature = getSignatureFromVRS(v, r, s);
+        bytes memory signature = getClaimSignature(requestId, ACCOUNT_ONE, rewardAmount);
         vm.expectRevert(EnforcedPause.selector);
         lockStaking.claimPendingReward(requestId, rewardAmount, signature);
         vm.stopPrank();
@@ -822,12 +808,7 @@ contract LockStakingTest is Test {
         initializeAndConfig();
         uint256 rewardAmount = 10 ether;
         string memory requestId = "lockStakingClaimOrder#1";
-        LockSigUtils.ClaimRequest memory claimRequest =
-            LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: ACCOUNT_ONE, rewardAmount: rewardAmount});
-        bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VALIDATOR_PRIVATE_KEY, digest);
-
-        bytes memory signature = getSignatureFromVRS(v, r, s);
+        bytes memory signature = getClaimSignature(requestId, ACCOUNT_ONE, rewardAmount);
         // Using account one with generated signature
         vm.startPrank(ACCOUNT_ONE);
         lockToken.approve(address(lockStaking), lockAmount);
@@ -835,5 +816,129 @@ contract LockStakingTest is Test {
         skip(100 days);
         address signer = lockStaking.getSignerForRequest(requestId, ACCOUNT_ONE, rewardAmount, signature);
         assertEq(signer, validator);
+    }
+
+    function test_claim_immediately_after_full_claim_no_commission() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        setupStakeAndWait();
+        uint256 pendingBefore = lockStaking.pendingReward(ACCOUNT_ONE);
+        assertGt(pendingBefore, 0, "Should have pending rewards after staking");
+        bytes memory signature1 = getClaimSignature("lockStakingClaimOrder#1", ACCOUNT_ONE, 0);
+        lockStaking.claimPendingReward("lockStakingClaimOrder#1", 0, signature1);
+        assertTrue(lockStaking.isRequestIdProcessed("lockStakingClaimOrder#1"));
+        assertEq(lockStaking.pendingReward(ACCOUNT_ONE), 0);
+        bytes memory signature2 = getClaimSignature("lockStakingClaimOrder#2", ACCOUNT_ONE, 0);
+        lockStaking.claimPendingReward("lockStakingClaimOrder#2", 0, signature2);
+        assertTrue(lockStaking.isRequestIdProcessed("lockStakingClaimOrder#2"));
+        vm.stopPrank();
+    }
+
+    function test_claim_immediately_after_full_claim_with_commission() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        setupStakeAndWait();
+        uint256 pendingBefore = lockStaking.pendingReward(ACCOUNT_ONE);
+        assertGt(pendingBefore, 0, "Should have pending rewards after staking");
+        bytes memory signature1 = getClaimSignature("lockStakingClaimOrder#1", ACCOUNT_ONE, 5 ether);
+        lockStaking.claimPendingReward("lockStakingClaimOrder#1", 5 ether, signature1);
+        assertTrue(lockStaking.isRequestIdProcessed("lockStakingClaimOrder#1"));
+        assertEq(lockStaking.pendingReward(ACCOUNT_ONE), 0);
+        bytes memory signature2 = getClaimSignature("lockStakingClaimOrder#2", ACCOUNT_ONE, 5 ether);
+        lockStaking.claimPendingReward("lockStakingClaimOrder#2", 5 ether, signature2);
+        assertTrue(lockStaking.isRequestIdProcessed("lockStakingClaimOrder#2"));
+        vm.stopPrank();
+    }
+
+    function test_claim_with_accumulated_rewards_no_commission() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        setupStakeAndWait();
+        uint256 pendingBefore = lockStaking.pendingReward(ACCOUNT_ONE);
+        assertGt(pendingBefore, 0, "Should have pending rewards after staking");
+        bytes memory signature = getClaimSignature("lockStakingClaimOrder#1", ACCOUNT_ONE, 0);
+        lockStaking.claimPendingReward("lockStakingClaimOrder#1", 0, signature);
+        assertTrue(lockStaking.isRequestIdProcessed("lockStakingClaimOrder#1"));
+        vm.stopPrank();
+    }
+
+    function test_claim_with_accumulated_rewards_with_commission() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        setupStakeAndWait();
+        uint256 pendingBefore = lockStaking.pendingReward(ACCOUNT_ONE);
+        assertGt(pendingBefore, 0, "Should have pending rewards after staking");
+        bytes memory signature = getClaimSignature("lockStakingClaimOrder#1", ACCOUNT_ONE, 5 ether);
+        lockStaking.claimPendingReward("lockStakingClaimOrder#1", 5 ether, signature);
+        assertTrue(lockStaking.isRequestIdProcessed("lockStakingClaimOrder#1"));
+        vm.stopPrank();
+    }
+
+    function test_claim_after_full_withdraw_no_commission() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        setupStakeAndWait();
+        uint256 pendingBefore = lockStaking.pendingReward(ACCOUNT_ONE);
+        assertGt(pendingBefore, 0, "Should have pending rewards after staking");
+        lockStaking.withdrawLockToken(10 ether);
+        (uint256 lockedAmount,,,,,,) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(lockedAmount, 0, "Locked amount should be 0 after full withdrawal");
+        bytes memory signature = getClaimSignature("lockStakingClaimOrder#1", ACCOUNT_ONE, 0);
+        lockStaking.claimPendingReward("lockStakingClaimOrder#1", 0, signature);
+        assertTrue(lockStaking.isRequestIdProcessed("lockStakingClaimOrder#1"));
+        vm.stopPrank();
+    }
+
+    function test_claim_after_full_withdraw_with_commission() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        setupStakeAndWait();
+        uint256 pendingBefore = lockStaking.pendingReward(ACCOUNT_ONE);
+        assertGt(pendingBefore, 0, "Should have pending rewards after staking");
+        lockStaking.withdrawLockToken(10 ether);
+        (uint256 lockedAmount,,,,,,) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(lockedAmount, 0, "Locked amount should be 0 after full withdrawal");
+        bytes memory signature = getClaimSignature("lockStakingClaimOrder#1", ACCOUNT_ONE, 5 ether);
+        lockStaking.claimPendingReward("lockStakingClaimOrder#1", 5 ether, signature);
+        assertTrue(lockStaking.isRequestIdProcessed("lockStakingClaimOrder#1"));
+        vm.stopPrank();
+    }
+
+    function test_claim_after_withdraw_and_claim_no_commission() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        setupStakeAndWait();
+        uint256 pendingBefore = lockStaking.pendingReward(ACCOUNT_ONE);
+        assertGt(pendingBefore, 0, "Should have pending rewards after staking");
+        lockStaking.withdrawLockToken(10 ether);
+        (uint256 lockedAmount,,,,,,) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(lockedAmount, 0, "Locked amount should be 0 after full withdrawal");
+        bytes memory signature1 = getClaimSignature("lockStakingClaimOrder#1", ACCOUNT_ONE, 0);
+        lockStaking.claimPendingReward("lockStakingClaimOrder#1", 0, signature1);
+        assertTrue(lockStaking.isRequestIdProcessed("lockStakingClaimOrder#1"));
+        assertEq(lockStaking.pendingReward(ACCOUNT_ONE), 0);
+        bytes memory signature2 = getClaimSignature("lockStakingClaimOrder#2", ACCOUNT_ONE, 0);
+        vm.expectRevert(bytes("LOCK Staking: Nothing to claim"));
+        lockStaking.claimPendingReward("lockStakingClaimOrder#2", 0, signature2);
+        vm.stopPrank();
+    }
+
+    function test_claim_after_withdraw_and_claim_with_commission() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        setupStakeAndWait();
+        uint256 pendingBefore = lockStaking.pendingReward(ACCOUNT_ONE);
+        assertGt(pendingBefore, 0, "Should have pending rewards after staking");
+        lockStaking.withdrawLockToken(10 ether);
+        (uint256 lockedAmount,,,,,,) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(lockedAmount, 0, "Locked amount should be 0 after full withdrawal");
+        bytes memory signature1 = getClaimSignature("lockStakingClaimOrder#1", ACCOUNT_ONE, 5 ether);
+        lockStaking.claimPendingReward("lockStakingClaimOrder#1", 5 ether, signature1);
+        assertTrue(lockStaking.isRequestIdProcessed("lockStakingClaimOrder#1"));
+        assertEq(lockStaking.pendingReward(ACCOUNT_ONE), 0);
+        bytes memory signature2 = getClaimSignature("lockStakingClaimOrder#2", ACCOUNT_ONE, 5 ether);
+        lockStaking.claimPendingReward("lockStakingClaimOrder#2", 5 ether, signature2);
+        assertTrue(lockStaking.isRequestIdProcessed("lockStakingClaimOrder#2"));
+        vm.stopPrank();
     }
 }
