@@ -377,8 +377,8 @@ contract LockStaking is
         __Ownable_init_unchained(_owner);
         __UUPSUpgradeable_init();
         __Pausable_init();
-        __ReentrancyGuard_init();
         EIP712Upgradeable.__EIP712_init("LOCK_STAKING", "1");
+        __ReentrancyGuard_init();
         validatorAddress = _validator;
         lockonVesting = _lockonVesting;
         feeReceiver = _feeReceiver;
