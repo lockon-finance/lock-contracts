@@ -144,13 +144,17 @@ contract AirdropTest is Test {
 
     function test_distribute_airdrop_reward_fail() public {
         initializeAndConfig();
-        vm.startPrank(OWNER);
-        lockToken.approve(address(airdrop), 1 ether);
         address[] memory listUser = new address[](2);
         uint256[] memory listAmount = new uint256[](1);
         listUser[0] = address(bytes20(bytes("4")));
         listUser[1] = address(bytes20(bytes("5")));
         listAmount[0] = 40;
+        vm.startPrank(ACCOUNT_ONE);
+        vm.expectRevert("Airdrop: Forbidden");
+        airdrop.distributeAirdropReward(listUser, listAmount);
+        vm.stopPrank();
+        vm.startPrank(OWNER);
+        lockToken.approve(address(airdrop), 1 ether);
         vm.expectRevert("Airdrop: The list for user address and amount value must have equal length");
         airdrop.distributeAirdropReward(listUser, listAmount);
         uint256[] memory listTestAmount = new uint256[](2);
@@ -242,7 +246,7 @@ contract AirdropTest is Test {
         airdrop.setLockonVesting(address(0));
     }
 
-    function test__add_address_distribute_permission() public {
+    function test_add_address_distribute_permission() public {
         initializeAndConfig();
         vm.startPrank(OWNER);
         vm.recordLogs();
@@ -255,7 +259,7 @@ contract AirdropTest is Test {
         assertEq(entries[0].topics[0], keccak256("DistributePermissionStatusUpdated(address,address,bool,uint256)"));
     }
 
-    function test__remove_distribute_permission() public {
+    function test_remove_distribute_permission() public {
         initializeAndConfig();
         vm.startPrank(OWNER);
         vm.recordLogs();
@@ -282,7 +286,7 @@ contract AirdropTest is Test {
         assertEq(entries[3].topics[0], keccak256("DistributePermissionStatusUpdated(address,address,bool,uint256)"));
     }
 
-    function test__add_and_remove_distribute_permission_fail() public {
+    function test_add_and_remove_distribute_permission_fail() public {
         initializeAndConfig();
         vm.startPrank(OWNER);
         airdrop.addDistributePermission(ACCOUNT_ONE);
