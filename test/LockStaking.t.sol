@@ -420,6 +420,7 @@ contract LockStakingTest is Test {
         (, uint256 lockScore,,, uint256 rewardDebt,, uint256 cumulativePendingReward) =
             lockStaking.userInfo(ACCOUNT_ONE);
         skip(10 days);
+        uint256 timestampAtWithdraw1 = block.timestamp;
         uint256 validatorBalanceBefore = lockToken.balanceOf(validator);
         uint256 ACCOUNT_ONEBalanceBefore = lockToken.balanceOf(ACCOUNT_ONE);
         vm.recordLogs();
@@ -427,7 +428,9 @@ contract LockStakingTest is Test {
         assertEq(lockStaking.totalLockedAmount(), lockAmount);
         lockStaking.withdrawLockToken(lockAmount);
         uint256 userCumulativePendingReward = (lockScore * lockStaking.rewardPerScore()) / PRECISION - rewardDebt;
-        (, lockScore,,, rewardDebt,, cumulativePendingReward) = lockStaking.userInfo(ACCOUNT_ONE);
+        uint256 lockEndTimestampAfterWithdraw1;
+        (, lockScore,,, rewardDebt, lockEndTimestampAfterWithdraw1, cumulativePendingReward) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(lockEndTimestampAfterWithdraw1, timestampAtWithdraw1);
         assertEq(lockStaking.totalLockScore(), 0);
         assertEq(lockStaking.totalLockedAmount(), 0);
         assertEq(cumulativePendingReward, userCumulativePendingReward);
@@ -443,10 +446,13 @@ contract LockStakingTest is Test {
         // Lock another one Lock Token and then skip 200 days
         lockToken.approve(address(lockStaking), 1 ether);
         lockStaking.addLockToken(lockAmount, 200 days);
+        (, , , , , uint256 lockEndTimestampBeforeWithdraw2, ) = lockStaking.userInfo(ACCOUNT_ONE);
         // With 190 days left from first lock, total 390 days
         skip(390 days);
         // This time should be able to withdraw full amount of tokens that were locked
         lockStaking.withdrawLockToken(lockAmount);
+        (, , , , , uint256 lockEndTimestampAfterWithdraw2, ) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(lockEndTimestampAfterWithdraw2, lockEndTimestampBeforeWithdraw2);
         uint256 nextValidatorBalanceAfter = lockToken.balanceOf(validator);
         assertEq(lockStaking.totalLockScore(), 0);
         assertEq(lockStaking.totalLockedAmount(), 0);
@@ -939,6 +945,24 @@ contract LockStakingTest is Test {
         bytes memory signature2 = getClaimSignature("lockStakingClaimOrder#2", ACCOUNT_ONE, 5 ether);
         lockStaking.claimPendingReward("lockStakingClaimOrder#2", 5 ether, signature2);
         assertTrue(lockStaking.isRequestIdProcessed("lockStakingClaimOrder#2"));
+        vm.stopPrank();
+    }
+
+    function test_relock_after_early_withdrawal() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        uint256 firstLockDuration = 300 days;
+        lockToken.approve(address(lockStaking), 2 * lockAmount);
+        lockStaking.addLockToken(lockAmount, firstLockDuration);
+        skip(50 days);
+        uint256 timestampAtEarlyWithdraw = block.timestamp;
+        lockStaking.withdrawLockToken(lockAmount);
+        (, , , , , uint256 lockEndTimestampAfterWithdraw, ) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(lockEndTimestampAfterWithdraw, timestampAtEarlyWithdraw);
+        uint256 newLockDuration = 100 days;
+        lockStaking.addLockToken(lockAmount, newLockDuration);
+        (, , , , , uint256 newLockEndTimestamp, ) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(newLockEndTimestamp, timestampAtEarlyWithdraw + newLockDuration);
         vm.stopPrank();
     }
 }

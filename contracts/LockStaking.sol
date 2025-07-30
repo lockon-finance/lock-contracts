@@ -666,6 +666,11 @@ contract LockStaking is
         _currentUserInfo.lockScore = userLockScore;
         _currentUserInfo.rewardDebt = (userLockScore * rewardPerScore) / PRECISION;
 
+        // Update lock timestamp when all tokens are withdrawn
+        if (_currentUserInfo.lockedAmount == 0 && _currentUserInfo.lockEndTimestamp > block.timestamp) {
+            _currentUserInfo.lockEndTimestamp = block.timestamp;
+        }
+
         // Update state data
         totalLockedAmount -= _amount;
 
