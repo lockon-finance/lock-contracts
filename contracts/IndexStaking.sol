@@ -299,8 +299,8 @@ contract IndexStaking is
         require(_lockToken != address(0), "Index Staking: lockToken is the zero address");
         // Initialize the contract and set the owner
         // This function should be called only once during deployment
-        __Ownable_init_unchained(_owner);
         __UUPSUpgradeable_init();
+        __Ownable_init(_owner);
         __Pausable_init();
         EIP712Upgradeable.__EIP712_init(_domainName, _signatureVersion);
         __ReentrancyGuard_init();

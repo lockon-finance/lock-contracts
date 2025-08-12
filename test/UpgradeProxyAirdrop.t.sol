@@ -51,7 +51,8 @@ contract UpgradeProxyAirdropTest is Test {
 
         uint256[] memory vestingCategoryIds = new uint256[](0);
         uint256[] memory vestingPeriods = new uint256[](0);
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(token), vestingCategoryIds, vestingPeriods));
+        bytes memory lockonVestingData =
+            abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(token), vestingCategoryIds, vestingPeriods));
         tokenProxy = address(new ERC1967Proxy(address(token), tokenData));
         vm.stopPrank();
         // using account one for vesting contract

@@ -35,9 +35,34 @@ contract LockToken is Initializable, OwnableUpgradeable, ERC20Upgradeable, UUPSU
     /* ============ State Variables ============ */
 
     /**
+     * @dev Mapping that keeps track of whether each address is blocked
+     */
+    mapping(address => bool) private _isBlacklisted;
+
+    /**
      * @dev Reserved storage space to allow for layout changes in the future.
      */
-    uint256[50] private __gap;
+    uint256[49] private __gap;
+
+    /* ============ Events ============ */
+
+    /**
+     * Emitted when an address is banned from activities
+     *
+     * @param sender Address of the function executor
+     * @param userAddress address to be added to blacklist
+     * @param timestamp Timestamp at which the address is banned
+     */
+    event UserBlacklistAdded(address indexed sender, address indexed userAddress, uint256 timestamp);
+
+    /**
+     * Emitted when an address is unbanned from activities
+     *
+     * @param sender Address of the function executor
+     * @param userAddress address to be removed from blacklist
+     * @param timestamp Timestamp at which the address is unbanned
+     */
+    event UserBlacklistRemoved(address indexed sender, address indexed userAddress, uint256 timestamp);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -58,11 +83,11 @@ contract LockToken is Initializable, OwnableUpgradeable, ERC20Upgradeable, UUPSU
     {
         require(ownerAddress != address(0), "LockToken: ownerAddress is the zero address");
         require(managementAddress != address(0), "LockToken: managementAddress is the zero address");
-        // Initialize the ERC20 token with the provided name and symbol
-        __ERC20_init_unchained(name, symbol);
-        // Initialize the contract's owner
-        __Ownable_init_unchained(ownerAddress);
         __UUPSUpgradeable_init();
+        // Initialize the contract's owner
+        __Ownable_init(ownerAddress);
+        // Initialize the ERC20 token with the provided name and symbol
+        __ERC20_init(name, symbol);
         // Calculate the amount of tokens to mint to the owner (40% of MAX_SUPPLY)
         uint256 amountMintToOwner = (MAX_SUPPLY * OWNER_ALLOCATION_PERCENTAGE) / BASE_DENOMINATOR;
         // Calculate the amount of tokens to mint to the management (60% of MAX_SUPPLY)
@@ -73,8 +98,69 @@ contract LockToken is Initializable, OwnableUpgradeable, ERC20Upgradeable, UUPSU
     }
 
     /**
+     * @dev Adds an address to the blacklist, preventing it from transferring or approving tokens
+     * @param _userAddress Address to be added to the blacklist
+     */
+    function addBlacklistUser(address _userAddress) external onlyOwner {
+        require(_userAddress != address(0), "LOCK Token: Zero address not allowed");
+        require(!_isBlacklisted[_userAddress], "LOCK Token: Blacklist already contains this address");
+
+        _isBlacklisted[_userAddress] = true;
+        emit UserBlacklistAdded(msg.sender, _userAddress, block.timestamp);
+    }
+
+    /**
+     * @dev Removes an address from the blacklist, allowing it to transfer and approve tokens again
+     * @param _userAddress Address to be removed from the blacklist
+     */
+    function removeBlacklistUser(address _userAddress) external onlyOwner {
+        require(_userAddress != address(0), "LOCK Token: Zero address not allowed");
+        require(_isBlacklisted[_userAddress], "LOCK Token: Blacklist does not contain this address");
+
+        _isBlacklisted[_userAddress] = false;
+        emit UserBlacklistRemoved(msg.sender, _userAddress, block.timestamp);
+    }
+
+    /**
+     * @dev Returns whether an address is blacklisted
+     * @param _userAddress Address to check blacklist status
+     * @return bool True if the address is blacklisted, false otherwise
+     */
+    function isBlacklisted(address _userAddress) public view returns (bool) {
+        return _isBlacklisted[_userAddress];
+    }
+
+    /**
      * @dev Override function from UUPS contract for upgrade authorize
      * @param newImplementation  Address of the new implementation address
      */
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    /**
+     * @dev Override of ERC20 _update function to check blacklist status before token transfers
+     * @param from Address sending the tokens
+     * @param to Address receiving the tokens
+     * @param value Amount of tokens to transfer
+     */
+    function _update(address from, address to, uint256 value) internal virtual override {
+        require(!isBlacklisted(msg.sender), "LOCK Token: sender is blocked");
+        require(!isBlacklisted(from), "LOCK Token: transfer from is blocked");
+        require(!isBlacklisted(to), "LOCK Token: transfer to is blocked");
+
+        super._update(from, to, value);
+    }
+
+    /**
+     * @dev Override of ERC20 _approve function to check blacklist status before approval
+     * @param owner Address that owns the tokens
+     * @param spender Address that will be allowed to spend the tokens
+     * @param value Amount of tokens to approve
+     * @param emitEvent Whether to emit the Approval event
+     */
+    function _approve(address owner, address spender, uint256 value, bool emitEvent) internal virtual override {
+        require(!isBlacklisted(owner), "LOCK Token: owner is blocked");
+        require(!isBlacklisted(spender), "LOCK Token: spender is blocked");
+
+        super._approve(owner, spender, value, emitEvent);
+    }
 }

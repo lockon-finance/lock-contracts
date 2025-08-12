@@ -74,7 +74,9 @@ contract LockonReferralTest is Test {
     }
 
     function initializeAndConfig() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), lockonVestingCategoryIds, lockonVestingPeriods));
+        bytes memory lockonVestingData = abi.encodeCall(
+            lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), lockonVestingCategoryIds, lockonVestingPeriods)
+        );
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         bytes32[] memory referrlTypes = new bytes32[](0);
@@ -303,7 +305,9 @@ contract LockonReferralTest is Test {
     }
 
     function test_set_validator_fail() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), lockonVestingCategoryIds, lockonVestingPeriods));
+        bytes memory lockonVestingData = abi.encodeCall(
+            lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), lockonVestingCategoryIds, lockonVestingPeriods)
+        );
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         bytes32[] memory referralTypes = new bytes32[](0);
@@ -499,22 +503,12 @@ contract LockonReferralTest is Test {
         initializeAndConfig();
         uint256 rewardAmount = 10 ether;
         bytes32 requestId = "referralClaimOrder#2";
-        bytes memory signature = createAndSignRequest(
-            requestId,
-            ACCOUNT_ONE,
-            address(lockToken),
-            rewardAmount,
-            "investor"
-        );
+        bytes memory signature =
+            createAndSignRequest(requestId, ACCOUNT_ONE, address(lockToken), rewardAmount, "investor");
 
         vm.startPrank(ACCOUNT_ONE);
         address signer = referral.getSignerForRequest(
-            requestId,
-            ACCOUNT_ONE,
-            address(lockToken),
-            rewardAmount,
-            "investor",
-            signature
+            requestId, ACCOUNT_ONE, address(lockToken), rewardAmount, "investor", signature
         );
         assertEq(signer, validator);
     }
@@ -522,23 +516,11 @@ contract LockonReferralTest is Test {
     function test_get_signer_for_cancel_request() public {
         initializeAndConfig();
         bytes32 requestId = "referralClaimOrder#2";
-        bytes memory signature = createAndSignRequest(
-            requestId,
-            ACCOUNT_ONE,
-            address(lockToken),
-            1,
-            "investor"
-        );
+        bytes memory signature = createAndSignRequest(requestId, ACCOUNT_ONE, address(lockToken), 1, "investor");
 
         vm.startPrank(ACCOUNT_ONE);
-        address signer = referral.getSignerForRequest(
-            requestId,
-            ACCOUNT_ONE,
-            address(lockToken),
-            1,
-            "investor",
-            signature
-        );
+        address signer =
+            referral.getSignerForRequest(requestId, ACCOUNT_ONE, address(lockToken), 1, "investor", signature);
         assertEq(signer, validator);
     }
 
@@ -553,13 +535,8 @@ contract LockonReferralTest is Test {
         vm.startPrank(ACCOUNT_ONE);
         uint256 rewardAmount = 20 ether;
         bytes32 requestId = "referralClaimOrder#1";
-        bytes memory signature = createAndSignRequest(
-            requestId,
-            ACCOUNT_ONE,
-            address(stableToken),
-            rewardAmount,
-            referralType
-        );
+        bytes memory signature =
+            createAndSignRequest(requestId, ACCOUNT_ONE, address(stableToken), rewardAmount, referralType);
         vm.expectRevert(EnforcedPause.selector);
         referral.claimPendingReward(requestId, address(stableToken), rewardAmount, referralType, signature);
         vm.stopPrank();
@@ -617,7 +594,9 @@ contract LockonReferralTest is Test {
     }
 
     function test_revert_on_deposit_vesting() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), lockonVestingCategoryIds, lockonVestingPeriods));
+        bytes memory lockonVestingData = abi.encodeCall(
+            lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), lockonVestingCategoryIds, lockonVestingPeriods)
+        );
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         bytes32[] memory referralTypes = new bytes32[](0);
@@ -643,13 +622,8 @@ contract LockonReferralTest is Test {
         // Initalize signature for claim reward
         uint256 rewardAmount = 20 ether;
         bytes32 requestId = "referralClaimOrder#1";
-        bytes memory signature = createAndSignRequest(
-            requestId,
-            ACCOUNT_ONE,
-            address(lockToken),
-            rewardAmount,
-            referralType
-        );
+        bytes memory signature =
+            createAndSignRequest(requestId, ACCOUNT_ONE, address(lockToken), rewardAmount, referralType);
         // Transfer LOCK token to contract for reward distribution
         lockToken.transfer(address(referral), 100000 ether);
         // Using account one
@@ -676,13 +650,8 @@ contract LockonReferralTest is Test {
 
         uint256 rewardAmount = 20 ether;
         bytes32 requestId = bytes32("referralClaimOrder#1");
-        bytes memory signature = createAndSignRequest(
-            requestId,
-            ACCOUNT_ONE,
-            address(lockToken),
-            rewardAmount,
-            referralType
-        );
+        bytes memory signature =
+            createAndSignRequest(requestId, ACCOUNT_ONE, address(lockToken), rewardAmount, referralType);
 
         vm.startPrank(ACCOUNT_ONE);
         uint256 lockonVestingBalanceBefore = lockToken.balanceOf(address(lockonVesting));
@@ -701,13 +670,8 @@ contract LockonReferralTest is Test {
         referral.setReferralTypeToVestingCategoryId(referralType, 10001);
         uint256 rewardAmount = 20 ether;
         bytes32 requestId = bytes32("referralClaimOrder#1");
-        bytes memory signature = createAndSignRequest(
-            requestId,
-            ACCOUNT_ONE,
-            address(stableToken),
-            rewardAmount,
-            referralType
-        );
+        bytes memory signature =
+            createAndSignRequest(requestId, ACCOUNT_ONE, address(stableToken), rewardAmount, referralType);
 
         vm.startPrank(ACCOUNT_ONE);
         uint256 accountOneBalanceBefore = stableToken.balanceOf(ACCOUNT_ONE);
@@ -733,13 +697,8 @@ contract LockonReferralTest is Test {
 
         uint256 rewardAmount = 20 ether;
         bytes32 requestId = "referralClaimOrder#1";
-        bytes memory signature = createAndSignRequest(
-            requestId,
-            ACCOUNT_ONE,
-            address(lockToken),
-            rewardAmount,
-            referralType
-        );
+        bytes memory signature =
+            createAndSignRequest(requestId, ACCOUNT_ONE, address(lockToken), rewardAmount, referralType);
 
         vm.startPrank(ACCOUNT_ONE);
         vm.expectRevert("LOCKON Referral: _tokenAddress not supported");
@@ -793,13 +752,8 @@ contract LockonReferralTest is Test {
 
         uint256 rewardAmount = 20 ether;
         bytes32 requestId = "referralClaimOrder#1";
-        bytes memory signature = createAndSignRequest(
-            requestId,
-            ACCOUNT_ONE,
-            address(stableToken),
-            rewardAmount,
-            referralType
-        );
+        bytes memory signature =
+            createAndSignRequest(requestId, ACCOUNT_ONE, address(stableToken), rewardAmount, referralType);
 
         vm.startPrank(ACCOUNT_ONE);
         vm.expectRevert("LOCKON Referral: _tokenAddress not supported");
@@ -835,7 +789,6 @@ contract LockonReferralTest is Test {
         referral.claimPendingReward(requestId, address(stableToken), rewardAmount, referralType, signature);
     }
 
-
     function test_cancel_claim_order_normal_case() public {
         initializeAndConfig();
         vm.startPrank(OWNER);
@@ -848,9 +801,8 @@ contract LockonReferralTest is Test {
         vm.startPrank(ACCOUNT_ONE);
         vm.recordLogs();
 
-        bytes memory signature = createAndSignRequest(
-            requestId, ACCOUNT_ONE, address(lockToken), rewardAmount, referralType
-        );
+        bytes memory signature =
+            createAndSignRequest(requestId, ACCOUNT_ONE, address(lockToken), rewardAmount, referralType);
         referral.cancelClaimOrder(requestId, address(lockToken), rewardAmount, referralType, signature);
 
         // Verify that a cancelled request cannot be claimed
@@ -874,9 +826,7 @@ contract LockonReferralTest is Test {
         vm.startPrank(ACCOUNT_ONE);
         vm.recordLogs();
 
-        bytes memory signature = createAndSignRequest(
-            requestId, ACCOUNT_ONE, address(0), rewardAmount, referralType
-        );
+        bytes memory signature = createAndSignRequest(requestId, ACCOUNT_ONE, address(0), rewardAmount, referralType);
         referral.cancelClaimOrder(requestId, address(0), rewardAmount, referralType, signature);
 
         // Verify that a cancelled request cannot be claimed
@@ -901,9 +851,8 @@ contract LockonReferralTest is Test {
         vm.recordLogs();
 
         bytes32 unsupportedType = bytes32("unsupported_type");
-        bytes memory signature = createAndSignRequest(
-            requestId, ACCOUNT_ONE, address(lockToken), rewardAmount, unsupportedType
-        );
+        bytes memory signature =
+            createAndSignRequest(requestId, ACCOUNT_ONE, address(lockToken), rewardAmount, unsupportedType);
         referral.cancelClaimOrder(requestId, address(lockToken), rewardAmount, unsupportedType, signature);
 
         // Verify that a cancelled request cannot be claimed
@@ -927,9 +876,7 @@ contract LockonReferralTest is Test {
         vm.startPrank(ACCOUNT_ONE);
         vm.recordLogs();
 
-        bytes memory signature = createAndSignRequest(
-            requestId, ACCOUNT_ONE, address(lockToken), 0, referralType
-        );
+        bytes memory signature = createAndSignRequest(requestId, ACCOUNT_ONE, address(lockToken), 0, referralType);
         referral.cancelClaimOrder(requestId, address(lockToken), 0, referralType, signature);
 
         // Verify that a cancelled request cannot be claimed
@@ -949,13 +896,8 @@ contract LockonReferralTest is Test {
         bytes32 requestId = "referralClaimOrder#1";
         uint256 rewardAmount = 1 ether;
 
-        bytes memory signature = createAndSignRequest(
-            requestId,
-            ACCOUNT_ONE,
-            address(stableToken),
-            rewardAmount,
-            referralType
-        );
+        bytes memory signature =
+            createAndSignRequest(requestId, ACCOUNT_ONE, address(stableToken), rewardAmount, referralType);
 
         vm.startPrank(ACCOUNT_ONE);
         vm.expectRevert("LOCKON Referral: Invalid signature");

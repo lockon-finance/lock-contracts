@@ -93,7 +93,8 @@ contract UpgradeProxyTest is Test {
                 1
             )
         );
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(token), new uint256[](0), new uint256[](0)));
+        bytes memory lockonVestingData =
+            abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(token), new uint256[](0), new uint256[](0)));
         tokenProxy = address(new ERC1967Proxy(address(token), tokenData));
         lockStakingProxy = address(new ERC1967Proxy(address(lockStaking), lockStakingData));
         vm.stopPrank();

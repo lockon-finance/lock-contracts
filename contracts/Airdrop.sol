@@ -168,8 +168,8 @@ contract Airdrop is
         require(_lockToken != address(0), "Airdrop: lockToken is the zero address");
         // Initialize the contract and set the owner
         // This function should be called only once during deployment
-        __Ownable_init_unchained(_owner);
         __UUPSUpgradeable_init();
+        __Ownable_init(_owner);
         __Pausable_init();
         __ReentrancyGuard_init();
         lockonVesting = _lockonVesting;
@@ -207,7 +207,7 @@ contract Airdrop is
             }
         }
         totalPendingAirdropAmount += totalAmount;
-        emit AirdropRewardDistributed(msg.sender, listUserLen, totalPendingAirdropAmount);
+        emit AirdropRewardDistributed(msg.sender, totalAmount, totalPendingAirdropAmount);
     }
 
     /**

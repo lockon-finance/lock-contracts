@@ -51,7 +51,9 @@ contract LockStakingTest is Test {
     }
 
     function initializeAndConfig() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), vestingCategoryIds, vestingPeriods));
+        bytes memory lockonVestingData = abi.encodeCall(
+            lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), vestingCategoryIds, vestingPeriods)
+        );
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         bytes memory lockStakingData = abi.encodeCall(
@@ -87,7 +89,11 @@ contract LockStakingTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function getClaimSignature(string memory requestId, address beneficiary, uint256 rewardAmount) internal view returns (bytes memory) {
+    function getClaimSignature(string memory requestId, address beneficiary, uint256 rewardAmount)
+        internal
+        view
+        returns (bytes memory)
+    {
         LockSigUtils.ClaimRequest memory claimRequest =
             LockSigUtils.ClaimRequest({requestId: requestId, beneficiary: beneficiary, rewardAmount: rewardAmount});
         bytes32 digest = sigUtils.getTypedDataHash(claimRequest);
@@ -279,7 +285,9 @@ contract LockStakingTest is Test {
     }
 
     function test_add_lock_token_fail() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), vestingCategoryIds, vestingPeriods));
+        bytes memory lockonVestingData = abi.encodeCall(
+            lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), vestingCategoryIds, vestingPeriods)
+        );
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         bytes memory lockStakingData = abi.encodeCall(
@@ -429,7 +437,8 @@ contract LockStakingTest is Test {
         lockStaking.withdrawLockToken(lockAmount);
         uint256 userCumulativePendingReward = (lockScore * lockStaking.rewardPerScore()) / PRECISION - rewardDebt;
         uint256 lockEndTimestampAfterWithdraw1;
-        (, lockScore,,, rewardDebt, lockEndTimestampAfterWithdraw1, cumulativePendingReward) = lockStaking.userInfo(ACCOUNT_ONE);
+        (, lockScore,,, rewardDebt, lockEndTimestampAfterWithdraw1, cumulativePendingReward) =
+            lockStaking.userInfo(ACCOUNT_ONE);
         assertEq(lockEndTimestampAfterWithdraw1, timestampAtWithdraw1);
         assertEq(lockStaking.totalLockScore(), 0);
         assertEq(lockStaking.totalLockedAmount(), 0);
@@ -446,12 +455,12 @@ contract LockStakingTest is Test {
         // Lock another one Lock Token and then skip 200 days
         lockToken.approve(address(lockStaking), 1 ether);
         lockStaking.addLockToken(lockAmount, 200 days);
-        (, , , , , uint256 lockEndTimestampBeforeWithdraw2, ) = lockStaking.userInfo(ACCOUNT_ONE);
+        (,,,,, uint256 lockEndTimestampBeforeWithdraw2,) = lockStaking.userInfo(ACCOUNT_ONE);
         // With 190 days left from first lock, total 390 days
         skip(390 days);
         // This time should be able to withdraw full amount of tokens that were locked
         lockStaking.withdrawLockToken(lockAmount);
-        (, , , , , uint256 lockEndTimestampAfterWithdraw2, ) = lockStaking.userInfo(ACCOUNT_ONE);
+        (,,,,, uint256 lockEndTimestampAfterWithdraw2,) = lockStaking.userInfo(ACCOUNT_ONE);
         assertEq(lockEndTimestampAfterWithdraw2, lockEndTimestampBeforeWithdraw2);
         uint256 nextValidatorBalanceAfter = lockToken.balanceOf(validator);
         assertEq(lockStaking.totalLockScore(), 0);
@@ -481,7 +490,9 @@ contract LockStakingTest is Test {
     }
 
     function test_set_validator_fail() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), vestingCategoryIds, vestingPeriods));
+        bytes memory lockonVestingData = abi.encodeCall(
+            lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), vestingCategoryIds, vestingPeriods)
+        );
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         bytes memory lockStakingData = abi.encodeCall(
@@ -678,7 +689,9 @@ contract LockStakingTest is Test {
     }
 
     function test_revert_on_deposit_vesting() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), vestingCategoryIds, vestingPeriods));
+        bytes memory lockonVestingData = abi.encodeCall(
+            lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), vestingCategoryIds, vestingPeriods)
+        );
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         bytes memory lockStakingData = abi.encodeCall(
@@ -957,11 +970,11 @@ contract LockStakingTest is Test {
         skip(50 days);
         uint256 timestampAtEarlyWithdraw = block.timestamp;
         lockStaking.withdrawLockToken(lockAmount);
-        (, , , , , uint256 lockEndTimestampAfterWithdraw, ) = lockStaking.userInfo(ACCOUNT_ONE);
+        (,,,,, uint256 lockEndTimestampAfterWithdraw,) = lockStaking.userInfo(ACCOUNT_ONE);
         assertEq(lockEndTimestampAfterWithdraw, timestampAtEarlyWithdraw);
         uint256 newLockDuration = 100 days;
         lockStaking.addLockToken(lockAmount, newLockDuration);
-        (, , , , , uint256 newLockEndTimestamp, ) = lockStaking.userInfo(ACCOUNT_ONE);
+        (,,,,, uint256 newLockEndTimestamp,) = lockStaking.userInfo(ACCOUNT_ONE);
         assertEq(newLockEndTimestamp, timestampAtEarlyWithdraw + newLockDuration);
         vm.stopPrank();
     }

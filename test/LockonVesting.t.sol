@@ -41,21 +41,25 @@ contract LockonVestingTest is Test {
     }
 
     function initializeVestingContract() public {
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (OWNER, address(lockToken), vestingCategoryIds, vestingPeriods));
+        bytes memory lockonVestingData =
+            abi.encodeCall(lockonVesting.initialize, (OWNER, address(lockToken), vestingCategoryIds, vestingPeriods));
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
     }
 
     function test_initialize_fail_owner_zero_address() public {
         vm.expectRevert("LOCKON Vesting: owner is the zero address");
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (address(0), address(lockToken), vestingCategoryIds, vestingPeriods));
+        bytes memory lockonVestingData = abi.encodeCall(
+            lockonVesting.initialize, (address(0), address(lockToken), vestingCategoryIds, vestingPeriods)
+        );
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
     }
 
     function test_initialize_fail_lock_token_zero_address() public {
         vm.expectRevert("LOCKON Vesting: lockToken is the zero address");
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (OWNER, address(0), vestingCategoryIds, vestingPeriods));
+        bytes memory lockonVestingData =
+            abi.encodeCall(lockonVesting.initialize, (OWNER, address(0), vestingCategoryIds, vestingPeriods));
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
     }
@@ -100,15 +104,15 @@ contract LockonVestingTest is Test {
         );
         vm.startPrank(OWNER);
         lockonVesting.deposit(ACCOUNT_TWO, vestingAmount, 0);
-        // Add vesting for blacklist address
-        lockonVesting.addBlacklistUser(ACCOUNT_TWO);
+        // Add blacklist address at LockToken level
+        lockToken.addBlacklistUser(ACCOUNT_TWO);
         vm.expectRevert("LOCKON Vesting: User has been banned from all activities in LOCKON Vesting");
         lockonVesting.deposit(ACCOUNT_TWO, vestingAmount, 0);
         // Add vesting for zero address
         vm.expectRevert("LOCKON Vesting: Zero address not allowed");
         lockonVesting.deposit(address(0), vestingAmount, 0);
         // Add vesting with amount equal to zero
-        lockonVesting.removeBlacklistUser(ACCOUNT_TWO);
+        lockToken.removeBlacklistUser(ACCOUNT_TWO);
         vm.expectRevert("LOCKON Vesting: Vesting amount must be greater than 0");
         lockonVesting.deposit(ACCOUNT_TWO, 0, 0);
         vm.expectRevert("LOCKON Vesting: Category do not exist");
@@ -223,7 +227,8 @@ contract LockonVestingTest is Test {
 
     function test__claim_vesting_fail() public {
         initializeVestingContract();
-        lockonVesting.addBlacklistUser(ACCOUNT_TWO);
+        // Blacklist ACCOUNT_TWO at token level
+        lockToken.addBlacklistUser(ACCOUNT_TWO);
         vm.stopPrank();
         vm.startPrank(ACCOUNT_TWO);
         // Add vesting for blacklist address
@@ -231,9 +236,10 @@ contract LockonVestingTest is Test {
         lockonVesting.claim(0);
         vm.stopPrank();
         vm.startPrank(OWNER);
-        lockonVesting.removeBlacklistUser(ACCOUNT_TWO);
+        lockToken.removeBlacklistUser(ACCOUNT_TWO);
+        // Test with ACCOUNT_ONE who has no vesting
         vm.stopPrank();
-        vm.startPrank(ACCOUNT_TWO);
+        vm.startPrank(ACCOUNT_ONE);
         vm.expectRevert("LOCKON Vesting: User has nothing to claim");
         lockonVesting.claim(0);
     }
@@ -276,44 +282,6 @@ contract LockonVestingTest is Test {
         assertEq(entries[3].topics[0], keccak256("DepositPermissionStatusUpdated(address,address,bool,uint256)"));
     }
 
-    function test__add_blacklist_address() public {
-        initializeVestingContract();
-        vm.recordLogs();
-        lockonVesting.addBlacklistUser(ACCOUNT_ONE);
-        assertEq(lockonVesting.isBlacklistUser(ACCOUNT_ONE), true);
-        address[] memory blacklist = lockonVesting.getBlacklist();
-        assertEq(blacklist[0], ACCOUNT_ONE);
-        vm.roll(block.number + 1);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-        assertEq(entries[0].topics[0], keccak256("UserBlacklistUserAdded(address,address,bool,uint256)"));
-    }
-
-    function test__remove_blacklist_address() public {
-        initializeVestingContract();
-        vm.recordLogs();
-        lockonVesting.addBlacklistUser(ACCOUNT_ONE);
-        lockonVesting.removeBlacklistUser(ACCOUNT_ONE);
-        lockonVesting.addBlacklistUser(ACCOUNT_ONE);
-        assertEq(lockonVesting.isBlacklistUser(ACCOUNT_ONE), true);
-        address[] memory blacklist = lockonVesting.getBlacklist();
-        assertEq(blacklist[0], ACCOUNT_ONE);
-        lockonVesting.removeBlacklistUser(ACCOUNT_ONE);
-        blacklist = lockonVesting.getBlacklist();
-        assertEq(lockonVesting.isBlacklistUser(ACCOUNT_ONE), false);
-        assertEq(blacklist.length, 0);
-        lockonVesting.addBlacklistUser(ACCOUNT_ONE);
-        lockonVesting.addBlacklistUser(ACCOUNT_TWO);
-        lockonVesting.removeBlacklistUser(ACCOUNT_TWO);
-        blacklist = lockonVesting.getBlacklist();
-        assertEq(blacklist[0], ACCOUNT_ONE);
-        vm.roll(block.number + 1);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-        assertEq(entries[0].topics[0], keccak256("UserBlacklistUserAdded(address,address,bool,uint256)"));
-        assertEq(entries[1].topics[0], keccak256("UserBlacklistUserRemoved(address,address,bool,uint256)"));
-        assertEq(entries[2].topics[0], keccak256("UserBlacklistUserAdded(address,address,bool,uint256)"));
-        assertEq(entries[1].topics[0], keccak256("UserBlacklistUserRemoved(address,address,bool,uint256)"));
-    }
-
     function test__add_and_remove_address_deposit_permission_fail() public {
         initializeVestingContract();
         lockonVesting.addAddressDepositPermission(ACCOUNT_ONE);
@@ -325,19 +293,6 @@ contract LockonVestingTest is Test {
         lockonVesting.removeAddressDepositPermission(address(0));
         vm.expectRevert("LOCKON Vesting: List allowed deposit address does not contain this address");
         lockonVesting.removeAddressDepositPermission(ACCOUNT_TWO);
-    }
-
-    function test__add_and_remove_blacklist_address_fail() public {
-        initializeVestingContract();
-        lockonVesting.addBlacklistUser(ACCOUNT_ONE);
-        vm.expectRevert("LOCKON Vesting: Zero address not allowed");
-        lockonVesting.addBlacklistUser(address(0));
-        vm.expectRevert("LOCKON Vesting: Blacklist already contains this address");
-        lockonVesting.addBlacklistUser(ACCOUNT_ONE);
-        vm.expectRevert("LOCKON Vesting: Zero address not allowed");
-        lockonVesting.removeBlacklistUser(address(0));
-        vm.expectRevert("LOCKON Vesting: Blacklist does not contain this address");
-        lockonVesting.removeBlacklistUser(ACCOUNT_TWO);
     }
 
     function test__set_vesting_categories() public {
@@ -393,13 +348,9 @@ contract LockonVestingTest is Test {
 
         vm.expectRevert("LOCKON Vesting: categoryIds and vestingPeriods length mismatch");
         bytes memory lockonVestingData = abi.encodeCall(
-            lockonVesting.initialize,
-            (OWNER, address(lockToken), failVestingCategoryIds, failVestingPeriods)
+            lockonVesting.initialize, (OWNER, address(lockToken), failVestingCategoryIds, failVestingPeriods)
         );
-        lockonVestingProxy = new ERC1967Proxy(
-            address(lockonVesting),
-            lockonVestingData
-        );
+        lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
     }
 
     function test_initialize_fail_zero_vesting_period() public {
@@ -410,17 +361,11 @@ contract LockonVestingTest is Test {
         failVestingPeriods[0] = 100 days;
         failVestingPeriods[1] = 0; // Invalid vesting period
 
-        vm.expectRevert(
-            "LOCKON Vesting: Vesting period must be greater than 0"
-        );
+        vm.expectRevert("LOCKON Vesting: Vesting period must be greater than 0");
         bytes memory lockonVestingData = abi.encodeCall(
-            lockonVesting.initialize,
-            (OWNER, address(lockToken), failVestingCategoryIds, failVestingPeriods)
+            lockonVesting.initialize, (OWNER, address(lockToken), failVestingCategoryIds, failVestingPeriods)
         );
-        lockonVestingProxy = new ERC1967Proxy(
-            address(lockonVesting),
-            lockonVestingData
-        );
+        lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
     }
 
     function test_initialize_empty_category_id() public {
@@ -428,17 +373,59 @@ contract LockonVestingTest is Test {
         uint256[] memory failVestingPeriods = new uint256[](0);
 
         bytes memory lockonVestingData = abi.encodeCall(
-            lockonVesting.initialize,
-            (OWNER, address(lockToken), failVestingCategoryIds, failVestingPeriods)
+            lockonVesting.initialize, (OWNER, address(lockToken), failVestingCategoryIds, failVestingPeriods)
         );
-        lockonVestingProxy = new ERC1967Proxy(
-            address(lockonVesting),
-            lockonVestingData
-        );
+        lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
 
         assertEq(lockonVesting.vestingCategories(0), 0);
         assertEq(lockonVesting.vestingCategories(1), 0);
         assertEq(lockonVesting.vestingCategories(2), 0);
     }
 
+    function test_vesting_period_set_to_zero_after_deposit() public {
+        // Initialize with normal vesting period
+        uint256[] memory vestingCategoryIds = new uint256[](1);
+        vestingCategoryIds[0] = 6;
+        uint256[] memory vestingPeriods = new uint256[](1);
+        vestingPeriods[0] = 300 days;
+
+        bytes memory lockonVestingData =
+            abi.encodeCall(lockonVesting.initialize, (OWNER, address(lockToken), vestingCategoryIds, vestingPeriods));
+        lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
+        lockonVesting = LockonVesting(address(lockonVestingProxy));
+
+        uint256 vestingAmount = 100 * 1e18;
+
+        // Make a deposit with normal vesting period
+        lockToken.approve(address(lockonVesting), vestingAmount);
+        lockonVesting.deposit(ACCOUNT_ONE, vestingAmount, 6);
+
+        // Verify partial vesting after some time
+        skip(30 days);
+        uint256 partialClaimable = lockonVesting.currentTotalClaimable(ACCOUNT_ONE, 6);
+        assertEq(partialClaimable, vestingAmount * 30 days / 300 days, "Should have partial vesting after 30 days");
+
+        // Now set the vesting period to 0 (immediate vesting)
+        uint256[] memory updateIds = new uint256[](1);
+        updateIds[0] = 6;
+        uint256[] memory updatePeriods = new uint256[](1);
+        updatePeriods[0] = 0;
+        lockonVesting.setVestingCategories(updateIds, updatePeriods);
+
+        // After setting to 0, full amount should be immediately claimable
+        uint256 fullClaimable = lockonVesting.currentTotalClaimable(ACCOUNT_ONE, 6);
+        assertEq(fullClaimable, vestingAmount, "Full amount should be claimable when vestingPeriods is 0");
+
+        // Claim all tokens
+        vm.stopPrank();
+        vm.prank(ACCOUNT_ONE);
+        lockonVesting.claim(6);
+        assertEq(lockToken.balanceOf(ACCOUNT_ONE), vestingAmount, "All tokens should be claimed");
+
+        // Try to deposit again - should fail because category is now 0 (non-existent)
+        vm.startPrank(OWNER);
+        lockToken.approve(address(lockonVesting), vestingAmount);
+        vm.expectRevert("LOCKON Vesting: Category do not exist");
+        lockonVesting.deposit(ACCOUNT_ONE, vestingAmount, 6);
+    }
 }

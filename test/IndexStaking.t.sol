@@ -64,7 +64,8 @@ contract IndexStakingTest is Test {
         uint256[] memory vestingPeriods = new uint256[](2);
         vestingPeriods[0] = 300 days;
         vestingPeriods[1] = 300 days;
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (OWNER, address(lockToken),vestingCategoryIds, vestingPeriods));
+        bytes memory lockonVestingData =
+            abi.encodeCall(lockonVesting.initialize, (OWNER, address(lockToken), vestingCategoryIds, vestingPeriods));
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         indexStaking = new IndexStaking();
@@ -112,12 +113,11 @@ contract IndexStakingTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function getClaimSignature(
-        string memory requestId,
-        address beneficiary,
-        address stakeToken,
-        uint256 claimAmount
-    ) internal view returns (bytes memory) {
+    function getClaimSignature(string memory requestId, address beneficiary, address stakeToken, uint256 claimAmount)
+        internal
+        view
+        returns (bytes memory)
+    {
         IndexSigUtils.ClaimRequest memory claimRequest = IndexSigUtils.ClaimRequest({
             requestId: requestId,
             beneficiary: beneficiary,
@@ -486,7 +486,8 @@ contract IndexStakingTest is Test {
         uint256 stakeAmount = 10 ether;
         uint256 claimAmount = 1 ether;
         string memory requestId = "indexStakingClaimOrder#1";
-        bytes memory signatureWithValidAmount = getClaimSignature(requestId, ACCOUNT_ONE, address(lpiToken), claimAmount);
+        bytes memory signatureWithValidAmount =
+            getClaimSignature(requestId, ACCOUNT_ONE, address(lpiToken), claimAmount);
         // User not stake any Token but still call to withdraw
         vm.startPrank(ACCOUNT_ONE);
         vm.expectRevert("Index Staking: User hasn't staked any token yet");

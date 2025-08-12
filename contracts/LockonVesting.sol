@@ -4,10 +4,10 @@ pragma solidity 0.8.23;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {ILockToken} from "./interfaces/ILockToken.sol";
 
 /**
  * @title LOCKON Vesting contract
@@ -32,7 +32,7 @@ contract LockonVesting is
     ReentrancyGuardUpgradeable,
     PausableUpgradeable
 {
-    using SafeERC20 for IERC20;
+    using SafeERC20 for ILockToken;
     /* ============ Vesting Struct ============ */
 
     struct VestingWallet {
@@ -63,8 +63,9 @@ contract LockonVesting is
     mapping(address => bool) public isAllowedDeposit;
     /**
      * @dev Mapping that keeps track of whether each address is banned from all activities in LOCKON Vesting
+     * NOTE: Deprecated - Blacklist functionality has been migrated to LockToken contract
      */
-    mapping(address => bool) public isBlacklistUser;
+    mapping(address => bool) private isBlacklistUser;
     /**
      * @dev List address allowed to receive to deposit to LOCKON Vesting contract
      */
@@ -75,16 +76,18 @@ contract LockonVesting is
     mapping(address => uint256) private allowedDepositOneBasedIndexes;
     /**
      * @dev List address banned from any activities in LOCKON Vesting, only owner can see this
+     * NOTE: Deprecated - Blacklist functionality has been migrated to LockToken contract
      */
     address[] private blacklist;
     /**
      * @dev Mapping that keeps track each user address index in the blacklist
+     * NOTE: Deprecated - Blacklist functionality has been migrated to LockToken contract
      */
     mapping(address => uint256) private blacklistOneBasedIndexes;
     /**
      * @dev Interface of the LOCK token contract
      */
-    IERC20 public lockToken;
+    ILockToken public lockToken;
     /**
      * @dev Reserved storage space to allow for layout changes in the future.
      */
@@ -133,26 +136,6 @@ contract LockonVesting is
     );
 
     /**
-     * Emitted when an address is banned from activities
-     *
-     * @param sender Address of the function executor
-     * @param userAddress address to be added to blacklist
-     * @param isBanned status for checking if address is banned
-     * @param timestamp Timestamp at which the address is banned
-     */
-    event UserBlacklistUserAdded(address indexed sender, address userAddress, bool isBanned, uint256 timestamp);
-
-    /**
-     * Emitted when an address is unbanned from activities
-     *
-     * @param sender Address of the function executor
-     * @param userAddress address to be removed from blacklist
-     * @param isBanned status for checking if address is banned
-     * @param timestamp Timestamp at which the address is unbanned
-     */
-    event UserBlacklistUserRemoved(address indexed sender, address userAddress, bool isBanned, uint256 timestamp);
-
-    /**
      * @dev Modifier that only owner and address that allowed to deposit can call certain functions
      */
     modifier onlyDepositGrantedOrOwner() {
@@ -187,18 +170,15 @@ contract LockonVesting is
         );
 
         // Initialize Ownable lib and set the owner
-        __Ownable_init_unchained(_owner);
         __UUPSUpgradeable_init();
-        __Pausable_init();
+        __Ownable_init(_owner);
         __ReentrancyGuard_init();
-        lockToken = IERC20(_lockToken);
+        __Pausable_init();
+        lockToken = ILockToken(_lockToken);
 
         // Set vesting categories
         for (uint256 i = 0; i < _categoryIds.length;) {
-            require(
-                _vestingPeriods[i] > 0,
-                "LOCKON Vesting: Vesting period must be greater than 0"
-            );
+            require(_vestingPeriods[i] > 0, "LOCKON Vesting: Vesting period must be greater than 0");
             vestingCategories[_categoryIds[i]] = _vestingPeriods[i];
 
             unchecked {
@@ -229,12 +209,14 @@ contract LockonVesting is
         if (vestingInfo.vestingAmount == 0) {
             return 0;
         }
+        uint256 vestingPeriods = vestingCategories[categoryId];
+        if (vestingPeriods != 0) {
+            uint256 timeDiff = block.timestamp - vestingInfo.startTime;
+            uint256 claimableAmount = (vestingInfo.vestingAmount * timeDiff / vestingPeriods);
 
-        uint256 timeDiff = block.timestamp - vestingInfo.startTime;
-        uint256 claimableAmount = (vestingInfo.vestingAmount * timeDiff / vestingCategories[categoryId]);
-
-        if (claimableAmount < vestingInfo.vestingAmount) {
-            return vestingInfo.claimableAmount + claimableAmount - vestingInfo.claimedAmount;
+            if (claimableAmount < vestingInfo.vestingAmount) {
+                return vestingInfo.claimableAmount + claimableAmount - vestingInfo.claimedAmount;
+            }
         }
 
         return vestingInfo.claimableAmount + vestingInfo.vestingAmount - vestingInfo.claimedAmount;
@@ -253,11 +235,14 @@ contract LockonVesting is
             return 0;
         }
 
-        uint256 timeDiff = block.timestamp - vestingInfo.startTime;
-        uint256 claimableAmount = (vestingInfo.vestingAmount * timeDiff / vestingCategories[categoryId]);
+        uint256 vestingPeriods = vestingCategories[categoryId];
+        if (vestingPeriods != 0) {
+            uint256 timeDiff = block.timestamp - vestingInfo.startTime;
+            uint256 claimableAmount = (vestingInfo.vestingAmount * timeDiff / vestingPeriods);
 
-        if (claimableAmount < vestingInfo.vestingAmount) {
-            return claimableAmount;
+            if (claimableAmount < vestingInfo.vestingAmount) {
+                return claimableAmount;
+            }
         }
 
         return vestingInfo.vestingAmount;
@@ -279,10 +264,12 @@ contract LockonVesting is
         whenNotPaused
         nonReentrant
     {
-        require(!isBlacklistUser[user], "LOCKON Vesting: User has been banned from all activities in LOCKON Vesting");
         require(amount != 0, "LOCKON Vesting: Vesting amount must be greater than 0");
         require(user != address(0), "LOCKON Vesting: Zero address not allowed");
         require(vestingCategories[categoryId] != 0, "LOCKON Vesting: Category do not exist");
+        require(
+            !lockToken.isBlacklisted(user), "LOCKON Vesting: User has been banned from all activities in LOCKON Vesting"
+        );
 
         VestingWallet storage vestingInfo = userVestingWallet[user][categoryId];
         uint256 claimableAmount = _claimable(user, categoryId);
@@ -307,7 +294,8 @@ contract LockonVesting is
      */
     function claim(uint256 categoryId) external nonReentrant whenNotPaused {
         require(
-            !isBlacklistUser[msg.sender], "LOCKON Vesting: User has been banned from all activities in LOCKON Vesting"
+            !lockToken.isBlacklisted(msg.sender),
+            "LOCKON Vesting: User has been banned from all activities in LOCKON Vesting"
         );
         uint256 claimableAmount = _claimable(msg.sender, categoryId);
         VestingWallet storage vestingInfo = userVestingWallet[msg.sender][categoryId];
@@ -399,45 +387,6 @@ contract LockonVesting is
                 ++i;
             }
         }
-    }
-
-    /**
-     * @dev Add address to list banned address
-     * @param _userAddress Blacklist Address
-     */
-    function addBlacklistUser(address _userAddress) external onlyOwner {
-        require(_userAddress != address(0), "LOCKON Vesting: Zero address not allowed");
-        require(!isBlacklistUser[_userAddress], "LOCKON Vesting: Blacklist already contains this address");
-        blacklist.push(_userAddress);
-        blacklistOneBasedIndexes[_userAddress] = blacklist.length;
-        isBlacklistUser[_userAddress] = true;
-        emit UserBlacklistUserAdded(msg.sender, _userAddress, isBlacklistUser[_userAddress], block.timestamp);
-    }
-
-    /**
-     * @dev Remove address from list banned address
-     * @param _userAddress Address to remove from blacklist
-     */
-    function removeBlacklistUser(address _userAddress) external onlyOwner {
-        require(_userAddress != address(0), "LOCKON Vesting: Zero address not allowed");
-        require(isBlacklistUser[_userAddress], "LOCKON Vesting: Blacklist does not contain this address");
-        uint256 len = blacklist.length;
-        uint256 index = blacklistOneBasedIndexes[_userAddress];
-        address lastValue = blacklist[len - 1];
-        blacklist[index - 1] = lastValue;
-        blacklistOneBasedIndexes[lastValue] = index;
-        // delete the index
-        delete blacklistOneBasedIndexes[_userAddress];
-        blacklist.pop();
-        isBlacklistUser[_userAddress] = false;
-        emit UserBlacklistUserRemoved(msg.sender, _userAddress, isBlacklistUser[_userAddress], block.timestamp);
-    }
-
-    /**
-     * @dev Get list banned address
-     */
-    function getBlacklist() external view onlyOwner returns (address[] memory) {
-        return blacklist;
     }
 
     /**

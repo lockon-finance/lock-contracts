@@ -33,22 +33,17 @@ const config: HardhatUserConfig = {
       blockGasLimit: 0x1fffffffffffff,
       allowUnlimitedContractSize: true,
       forking: {
-        url: `https://goerli.infura.io/v3/${infuraKey}`,
+        url: `https://sepolia.infura.io/v3/${infuraKey}`,
       },
-    },
-    goerli: {
-      url: `https://goerli.infura.io/v3/${infuraKey}`,
-      accounts: [privateKey],
-      chainId: 5,
     },
     sepolia: {
       url: `https://sepolia.infura.io/v3/${infuraKey}`,
       accounts: [privateKey],
     },
-    mumbai: {
-      url: `https://polygon-mumbai.g.alchemy.com/v2/${alchemyKey}`,
+    arbitrumSepolia: {
+      chainId: 421614,
+      url: `https://sepolia-rollup.arbitrum.io/rpc`,
       accounts: [privateKey],
-      chainId: 80001,
       timeout: 20000,
     },
     ethereum: {

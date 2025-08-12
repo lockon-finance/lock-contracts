@@ -43,7 +43,9 @@ contract AirdropTest is Test {
         vestingCategoryIds[0] = 2;
         uint256[] memory vestingPeriods = new uint256[](1);
         vestingPeriods[0] = 300 days;
-        bytes memory lockonVestingData = abi.encodeCall(lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken),vestingCategoryIds, vestingPeriods));
+        bytes memory lockonVestingData = abi.encodeCall(
+            lockonVesting.initialize, (ACCOUNT_ONE, address(lockToken), vestingCategoryIds, vestingPeriods)
+        );
         lockonVestingProxy = new ERC1967Proxy(address(lockonVesting), lockonVestingData);
         lockonVesting = LockonVesting(address(lockonVestingProxy));
         deal(OWNER, 100 ether);
@@ -112,6 +114,10 @@ contract AirdropTest is Test {
         assertEq(airdrop.totalPendingAirdropAmount(), 8456500);
         Vm.Log[] memory entries = vm.getRecordedLogs();
         assertEq(entries[0].topics[0], keccak256("AirdropRewardDistributed(address,uint256,uint256)"));
+        assertEq(entries[0].topics[1], bytes32(uint256(uint160(OWNER)))); // Check sender
+        (uint256 emittedAmount, uint256 emittedTotal) = abi.decode(entries[0].data, (uint256, uint256));
+        assertEq(emittedAmount, 8456500); // Check totalAmount distributed
+        assertEq(emittedTotal, 8456500); // Check totalPendingAirdropAmount
     }
 
     function test_claim_pending_reward() public {

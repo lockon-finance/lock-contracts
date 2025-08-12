@@ -374,8 +374,8 @@ contract LockStaking is
         require(_bonusRatePerSecond != 0, "LOCK Staking: Bonus rate per second must be greater than 0");
         // Initialize the contract and set the owner
         // This function should be called only once during deployment
-        __Ownable_init_unchained(_owner);
         __UUPSUpgradeable_init();
+        __Ownable_init(_owner);
         __Pausable_init();
         EIP712Upgradeable.__EIP712_init("LOCK_STAKING", "1");
         __ReentrancyGuard_init();
@@ -463,8 +463,7 @@ contract LockStaking is
         UserInfo storage _currentUserInfo = userInfo[msg.sender];
         uint256 userLockAmount = _currentUserInfo.lockedAmount;
         userLockAmount += _lockAmount;
-        (, uint256 newLockDuration) =
-            _calculateLockTimestamp(_currentUserInfo.lockEndTimestamp, _lockDuration, now_);
+        (, uint256 newLockDuration) = _calculateLockTimestamp(_currentUserInfo.lockEndTimestamp, _lockDuration, now_);
         return (userLockAmount * basicRate() * durationRate(newLockDuration)) / PRECISION / PRECISION;
     }
 
@@ -696,7 +695,8 @@ contract LockStaking is
     {
         UserInfo storage _currentUserInfo = userInfo[msg.sender];
         require(
-            _currentUserInfo.lockScore != 0 || _currentUserInfo.cumulativePendingReward != 0 || _commissionSharingReward != 0,
+            _currentUserInfo.lockScore != 0 || _currentUserInfo.cumulativePendingReward != 0
+                || _commissionSharingReward != 0,
             "LOCK Staking: Nothing to claim"
         );
         require(!isRequestIdProcessed[_requestId], "LOCK Staking: Request already processed");
