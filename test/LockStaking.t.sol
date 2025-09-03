@@ -320,7 +320,7 @@ contract LockStakingTest is Test {
         // Lock duration smaller than minimum
         lockToken.approve(address(lockStaking), 2 ether);
         vm.expectRevert("LOCK Staking: Minimum lock duration does not meet");
-        lockStaking.addLockToken(lockAmount, 50 days);
+        lockStaking.addLockToken(lockAmount, 20 days);
         skip(19 days);
         lockStaking.addLockToken(lockAmount, 200 days);
         skip(10 days);
@@ -333,9 +333,9 @@ contract LockStakingTest is Test {
         // Using account one
         vm.startPrank(ACCOUNT_ONE);
         lockToken.approve(address(lockStaking), 1 ether);
-        lockStaking.addLockToken(lockAmount, 101 days);
+        lockStaking.addLockToken(lockAmount, 31 days);
         vm.expectRevert("LOCK Staking: Invalid lock duration");
-        lockStaking.addLockToken(lockAmount, 100 days);
+        lockStaking.addLockToken(lockAmount, 30 days);
     }
 
     function test_extend_lock_duration() public {
@@ -405,9 +405,9 @@ contract LockStakingTest is Test {
         vm.recordLogs();
         lockToken.approve(address(lockStaking), 1 ether);
         lockStaking.addLockToken(lockAmount, 200 days);
-        // New lock duration must be greater or equal 100 days
+        // New lock duration must be greater or equal 30 days
         vm.expectRevert("LOCK Staking: Minimum lock duration does not meet");
-        lockStaking.extendLockDuration(80 days);
+        lockStaking.extendLockDuration(20 days);
         // New lock duration must be greater than current duration
         vm.expectRevert("LOCK Staking: Invalid lock duration");
         lockStaking.extendLockDuration(100 days);
@@ -647,13 +647,13 @@ contract LockStakingTest is Test {
         );
         uint256 rate = lockStaking.durationRate(1 days);
         assertEq(rate, 0);
-        rate = lockStaking.durationRate(101 days);
+        rate = lockStaking.durationRate(30 days);
         assertEq(rate, 1e12);
-        rate = lockStaking.durationRate(300 days);
+        rate = lockStaking.durationRate(60 days);
         assertEq(rate, 3.5e12);
-        rate = lockStaking.durationRate(601 days);
+        rate = lockStaking.durationRate(100 days);
         assertEq(rate, 8e12);
-        rate = lockStaking.durationRate(1001 days);
+        rate = lockStaking.durationRate(300 days);
         assertEq(rate, 16e12);
         lockStaking.rewardTokenPerSecond();
         lockStaking.getRewardMultiplier(100, 1000);

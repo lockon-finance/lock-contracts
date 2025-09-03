@@ -395,7 +395,7 @@ contract LockStaking is
         lockTokenReleasedTimestamp = block.timestamp;
         // Set penalty rate currently fixed at 30%
         penaltyRate = 300_000_000_000;
-        minimumLockDuration = 100 days;
+        minimumLockDuration = 30 days;
     }
 
     /* ============ View Functions ============ */
@@ -414,16 +414,16 @@ contract LockStaking is
      * @param _lockDuration The duration for which the tokens are locked, represented in seconds
      */
     function durationRate(uint256 _lockDuration) public pure returns (uint256) {
-        if (_lockDuration >= 1000 days) {
+        if (_lockDuration >= 300 days) {
             return 16e12;
         }
-        if (_lockDuration >= 600 days) {
+        if (_lockDuration >= 100 days) {
             return 8e12;
         }
-        if (_lockDuration >= 300 days) {
+        if (_lockDuration >= 60 days) {
             return 3.5e12;
         }
-        if (_lockDuration >= 100 days) {
+        if (_lockDuration >= 30 days) {
             return 1e12;
         }
         return 0;
