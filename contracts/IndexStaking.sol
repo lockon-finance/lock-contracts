@@ -314,11 +314,15 @@ contract IndexStaking is
             IERC20 stakeToken = pools[i].stakeToken;
             require(address(stakeToken) != address(0), "Index Staking: Zero address not allowed");
             require(
+                tokenPoolInfo[address(stakeToken)].stakeToken == IERC20(address(0)),
+                "Index Staking: Duplicate stake token in pools"
+            );
+            require(
                 pools[i].bonusRatePerSecond != 0, "Index Staking: Pool bonus rate per second must be greater than 0"
             );
             require(pools[i].vestingCategoryId != 0, "Index Staking: Vesting category id must be greater than 0");
             tokenPoolInfo[address(stakeToken)] =
-                PoolInfo(stakeToken, 0, 0, pools[i].bonusRatePerSecond, block.timestamp, pools[i].startTimestamp);
+                PoolInfo(stakeToken, 0, 0, pools[i].bonusRatePerSecond, pools[i].startTimestamp, pools[i].startTimestamp);
             stakeTokenToVestingCategoryId[address(stakeToken)] = pools[i].vestingCategoryId;
             unchecked {
                 ++i;
@@ -383,8 +387,10 @@ contract IndexStaking is
         require(tokenPoolInfo[_stakeToken].stakeToken != IERC20(address(0)), "Index Staking: Pool do not exist");
         PoolInfo storage poolInfo = tokenPoolInfo[_stakeToken];
         if (poolInfo.totalStakedAmount == 0) {
-            poolInfo.lastRewardTimestamp = block.timestamp;
             poolInfo.lastGeneratedReward = 0;
+            if (block.timestamp >= poolInfo.startTimestamp) {
+                poolInfo.lastRewardTimestamp = block.timestamp;
+            }
             return;
         }
         // Calculate the reward multiplier based on the difference in block timestamps

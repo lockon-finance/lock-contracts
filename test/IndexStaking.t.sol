@@ -231,6 +231,29 @@ contract IndexStakingTest is Test {
         indexStaking = IndexStaking(address(indexStakingProxy));
     }
 
+    function test_initialize_fail_duplicate_pool_in_array() public {
+        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](3);
+        poolInfos[0] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2300, block.timestamp, 3);
+        poolInfos[1] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_TWO), 2400, block.timestamp, 4);
+        poolInfos[2] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_ONE), 2500, block.timestamp + 1, 5);
+        vm.expectRevert("Index Staking: Duplicate stake token in pools");
+        bytes memory indexStakingData = abi.encodeCall(
+            indexStaking.initialize,
+            (
+                OWNER,
+                validator,
+                address(lockonVesting),
+                address(lockToken),
+                100000 ether,
+                "INDEX_STAKING",
+                "1",
+                poolInfos
+            )
+        );
+        indexStakingProxy = new ERC1967Proxy(address(indexStaking), indexStakingData);
+    }
+
+
     function test_initialize_fail_pool_bonus_rate() public {
         IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](2);
         poolInfos[0] = IndexStaking.InitPoolInfo(IERC20(ACCOUNT_THREE), 0, block.timestamp, 3);
@@ -882,5 +905,56 @@ contract IndexStakingTest is Test {
         indexStaking.claimIndexStakingReward(requestId, address(lpiToken), claimAmount, signature);
         vm.stopPrank();
         assertTrue(indexStaking.isRequestIdProcessed(requestId), "Claim should be processed successfully");
+    }
+
+    function test_before_start_no_unlock_and_no_lastRewardTimestamp_shift() public {
+        vm.stopPrank();
+        vm.startPrank(OWNER);
+        uint256 deployTime = block.timestamp;
+        uint256 futureStartTime = deployTime + 10 days;
+        IndexStaking.InitPoolInfo[] memory poolInfos = new IndexStaking.InitPoolInfo[](1);
+        poolInfos[0] = IndexStaking.InitPoolInfo(IERC20(address(lpiToken)), 2300, futureStartTime, 3);
+        bytes memory data = abi.encodeCall(
+            indexStaking.initialize,
+            (OWNER, validator, address(lockonVesting), address(lockToken),
+             100000 ether, "INDEX_STAKING", "1", poolInfos)
+        );
+        indexStakingProxy = new ERC1967Proxy(address(indexStaking), data);
+        indexStaking = IndexStaking(address(indexStakingProxy));
+        lockonVesting.addAddressDepositPermission(address(indexStaking));
+        lockToken.transfer(address(indexStaking), 100000 ether);
+        vm.stopPrank();
+        (,, uint256 lastGeneratedReward0,, uint256 lastRewardTimestamp0, uint256 startTimestamp) =
+            indexStaking.tokenPoolInfo(address(lpiToken));
+        assertEq(lastRewardTimestamp0, startTimestamp, "lastRewardTimestamp must be startTimestamp at init");
+        assertEq(lastGeneratedReward0, 0);
+        uint256 cr0 = indexStaking.currentRewardAmount();
+
+        vm.warp(startTimestamp - 1);
+        indexStaking.updatePool(address(lpiToken));
+        (,, uint256 lastGeneratedReward1,, uint256 lastRewardTimestamp1,) =
+            indexStaking.tokenPoolInfo(address(lpiToken));
+        uint256 cr1 = indexStaking.currentRewardAmount();
+        assertEq(cr1, cr0, "no reward should unlock before start");
+        assertEq(lastGeneratedReward1, 0, "no generated reward before start");
+        assertEq(lastRewardTimestamp1, startTimestamp, "lastRewardTimestamp must not move before start");
+
+        vm.warp(startTimestamp);
+        indexStaking.updatePool(address(lpiToken));
+        (,, uint256 lastGeneratedReward2,, uint256 lastRewardTimestamp2,) =
+            indexStaking.tokenPoolInfo(address(lpiToken));
+        uint256 cr2 = indexStaking.currentRewardAmount();
+        assertEq(cr2, cr0, "no reward should unlock at exact start timestamp");
+        assertEq(lastGeneratedReward2, 0, "no generated reward at exact start timestamp");
+        assertEq(lastRewardTimestamp2, startTimestamp, "lastRewardTimestamp must not move at exact start timestamp");
+
+        vm.warp(startTimestamp + 1);
+        indexStaking.updatePool(address(lpiToken));
+        (,, uint256 lastGeneratedReward3,, uint256 lastRewardTimestamp3,) =
+            indexStaking.tokenPoolInfo(address(lpiToken));
+        uint256 cr3 = indexStaking.currentRewardAmount();
+        assertEq(cr3, cr0, "no reward unlock while pool is empty after start");
+        assertEq(lastGeneratedReward3, 0, "no generated reward while empty after start");
+        assertEq(lastRewardTimestamp3, block.timestamp, "anchor should advance to current time after start when pool is empty");
     }
 }

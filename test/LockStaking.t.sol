@@ -4,6 +4,7 @@ pragma solidity 0.8.23;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import {LockStaking} from "../contracts/LockStaking.sol";
 import {LockonVesting} from "../contracts/LockonVesting.sol";
 import {LockToken} from "../contracts/LockToken.sol";
@@ -474,6 +475,31 @@ contract LockStakingTest is Test {
         lockStaking.withdrawLockToken(1);
     }
 
+    function test_withdraw_partial_reduces_score_proportionally() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        uint256 initialAmount = 1000 ether;
+        lockToken.approve(address(lockStaking), initialAmount);
+        lockStaking.addLockToken(initialAmount, 100 days);
+        (, uint256 initialScore,,,,, ) = lockStaking.userInfo(ACCOUNT_ONE);
+
+        skip(50 days);
+        uint256 withdrawAmount = 400 ether;
+        lockStaking.withdrawLockToken(withdrawAmount);
+        (uint256 remainingAmount, uint256 scoreAfterWithdraw,,,, , ) = lockStaking.userInfo(ACCOUNT_ONE);
+        uint256 expectedScore = Math.mulDiv(initialScore, 600 ether, 1000 ether);
+        assertEq(remainingAmount, 600 ether, "Remaining amount should be 600 LOCK");
+        assertEq(scoreAfterWithdraw, expectedScore, "Score should be reduced proportionally");
+
+        lockStaking.withdrawLockToken(100 ether);
+        (uint256 finalAmount, uint256 scoreAfterSecondWithdraw,,,, , ) = lockStaking.userInfo(ACCOUNT_ONE);
+        uint256 expectedScoreAfterSecond = Math.mulDiv(scoreAfterWithdraw, 500 ether, 600 ether);
+        assertEq(finalAmount, 500 ether, "Final amount should be 500 LOCK");
+        assertEq(scoreAfterSecondWithdraw, expectedScoreAfterSecond, "Score should be reduced proportionally again");
+
+        vm.stopPrank();
+    }
+
     function test_withdraw_lock_token_fail() public {
         initializeAndConfig();
         // User not lock any Lock Token but still call to withdraw
@@ -610,6 +636,12 @@ contract LockStakingTest is Test {
         assertEq(lockStaking.bonusRatePerSecond(), 2);
         lockStaking.setMinimumLockDuration(35600);
         assertEq(lockStaking.minimumLockDuration(), 35600);
+        lockStaking.setPenaltyRate(0);
+        assertEq(lockStaking.penaltyRate(), 0);
+        lockStaking.setPenaltyRate(300_000_000_000);
+        assertEq(lockStaking.penaltyRate(), 300_000_000_000);
+        vm.expectRevert("LOCK Staking: penalty rate exceeds cap");
+        lockStaking.setPenaltyRate(300_000_000_001);
         lockStaking.setPenaltyRate(2000);
         assertEq(lockStaking.penaltyRate(), 2000);
         lockStaking.setValidatorAddress(ACCOUNT_TWO);
@@ -625,7 +657,9 @@ contract LockStakingTest is Test {
         );
         assertEq(entries[2].topics[0], keccak256("MinimumLockDurationUpdated(address,uint256,uint256)"));
         assertEq(entries[3].topics[0], keccak256("PenaltyRateUpdated(address,uint256,uint256)"));
-        assertEq(entries[4].topics[0], keccak256("ValidatorAddressUpdated(address,address,uint256)"));
+        assertEq(entries[4].topics[0], keccak256("PenaltyRateUpdated(address,uint256,uint256)"));
+        assertEq(entries[5].topics[0], keccak256("PenaltyRateUpdated(address,uint256,uint256)"));
+        assertEq(entries[6].topics[0], keccak256("ValidatorAddressUpdated(address,address,uint256)"));
     }
 
     function test_set_bonus_rate_per_second_fail() public {
@@ -976,6 +1010,202 @@ contract LockStakingTest is Test {
         lockStaking.addLockToken(lockAmount, newLockDuration);
         (,,,,, uint256 newLockEndTimestamp,) = lockStaking.userInfo(ACCOUNT_ONE);
         assertEq(newLockEndTimestamp, timestampAtEarlyWithdraw + newLockDuration);
+        vm.stopPrank();
+    }
+
+    function test_add_lock_token_without_extension() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        lockToken.approve(address(lockStaking), 150 ether);
+        lockStaking.addLockToken(100 ether, 300 days);
+
+        (uint256 initialLockedAmount, uint256 initialLockScore, uint256 initialLockDuration,,, uint256 initialLockEnd,) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(initialLockedAmount, 100 ether);
+        assertEq(initialLockDuration, 300 days);
+
+        skip(100 days);
+
+        uint256 currentBasicRate = 1e12 + (100 days * lockStaking.basicRateDivider() * 1e12) / PRECISION;
+        uint256 timeProportion = Math.mulDiv(200 days, PRECISION, 300 days);
+        uint256 baseDurationRate = lockStaking.durationRate(300 days);
+        uint256 effectiveRate = Math.mulDiv(baseDurationRate, currentBasicRate, PRECISION);
+        uint256 expectedAddedScore = Math.mulDiv(
+            50 ether,
+            Math.mulDiv(timeProportion, effectiveRate, PRECISION),
+            PRECISION
+        );
+
+        lockStaking.addLockTokenWithoutExtension(50 ether);
+        (uint256 finalLockedAmount, uint256 finalLockScore, uint256 finalLockDuration,,, uint256 finalLockEnd,) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(finalLockedAmount, 150 ether, "locked amount should be 150 ether");
+        assertEq(finalLockScore, initialLockScore + expectedAddedScore, "score should increase by calculated amount");
+        assertEq(finalLockDuration, initialLockDuration, "lock duration should remain unchanged");
+        assertEq(finalLockEnd, initialLockEnd, "lock end timestamp should remain unchanged");
+
+        vm.stopPrank();
+    }
+
+    function test_add_lock_token_without_extension_with_pending_reward() public {
+        initializeAndConfig();
+        vm.startPrank(OWNER);
+        lockToken.transfer(address(lockStaking), 1000 ether);
+        vm.stopPrank();
+
+        vm.startPrank(ACCOUNT_ONE);
+        lockToken.approve(address(lockStaking), 150 ether);
+        lockStaking.addLockToken(100 ether, 300 days);
+
+        skip(10 days);
+        (, uint256 scoreB,,, uint256 debtB,, uint256 cumB) = lockStaking.userInfo(ACCOUNT_ONE);
+        uint256 rpsBefore = lockStaking.rewardPerScore();
+        uint256 tlsBefore = lockStaking.totalLockScore();
+        uint256 lastTs = lockStaking.lastRewardTimestamp();
+        uint256 lockReward = lockStaking.getRewardMultiplier(lastTs, block.timestamp);
+        uint256 rpsDelta = (tlsBefore == 0) ? 0 : Math.mulDiv(lockReward, PRECISION, tlsBefore);
+        uint256 rpsExpected = rpsBefore + rpsDelta;
+        uint256 expectedPending = Math.mulDiv(scoreB, rpsExpected, PRECISION) - debtB;
+        lockStaking.addLockTokenWithoutExtension(50 ether);
+        (,,,,,, uint256 cumAfter) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(cumAfter, cumB + expectedPending, "cumulativePendingReward must increase exactly by pending reward");
+        (, uint256 newScore,,, uint256 newDebt,,) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(newDebt, Math.mulDiv(newScore, lockStaking.rewardPerScore(), PRECISION), "rewardDebt must equal score * rewardPerScore / PRECISION");
+
+        vm.stopPrank();
+    }
+
+    function test_add_lock_token_without_extension_full_duration() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        lockToken.approve(address(lockStaking), 200 ether);
+        uint256 lockDuration = 300 days;
+        lockStaking.addLockToken(100 ether, lockDuration);
+        (, uint256 initialLockScore,,,, uint256 initialLockEnd,) = lockStaking.userInfo(ACCOUNT_ONE);
+        uint256 totalLockScoreBefore = lockStaking.totalLockScore();
+        lockStaking.addLockTokenWithoutExtension(100 ether);
+        (uint256 finalLockedAmount, uint256 finalLockScore,,,, uint256 finalLockEnd,) = lockStaking.userInfo(ACCOUNT_ONE);
+        uint256 totalLockScoreAfter = lockStaking.totalLockScore();
+        assertEq(finalLockedAmount, 200 ether, "locked amount should be 200 ether");
+        assertEq(finalLockScore, initialLockScore * 2, "score should be exactly double when adding same amount at full duration");
+        assertEq(finalLockEnd, initialLockEnd, "lock end timestamp should remain unchanged");
+        assertEq(totalLockScoreAfter, totalLockScoreBefore * 2, "total lock score should be exactly double");
+        vm.stopPrank();
+    }
+
+    function test_add_lock_token_without_extension_fail_no_active_lock() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        lockToken.approve(address(lockStaking), 100 ether);
+        vm.expectRevert("LOCK Staking: no active lock");
+        lockStaking.addLockTokenWithoutExtension(10 ether);
+        vm.stopPrank();
+    }
+
+    function test_add_lock_token_without_extension_fail_zero_amount() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        lockToken.approve(address(lockStaking), 100 ether);
+        lockStaking.addLockToken(100 ether, 300 days);
+        vm.expectRevert("LOCK Staking: Locked amount must be greater than 0");
+        lockStaking.addLockTokenWithoutExtension(0);
+        vm.stopPrank();
+    }
+
+    function test_add_lock_token_without_extension_fail_expired_lock() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        lockToken.approve(address(lockStaking), 100 ether);
+        lockStaking.addLockToken(100 ether, 30 days);
+        skip(31 days);
+        vm.expectRevert("LOCK Staking: no active lock");
+        lockStaking.addLockTokenWithoutExtension(10 ether);
+        vm.stopPrank();
+    }
+
+    function test_add_lock_token_without_extension_fail_zero_score() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        lockToken.approve(address(lockStaking), 200 ether);
+        lockStaking.addLockToken(100 ether, 30 days);
+        skip(30 days - 1 seconds);
+        vm.expectRevert("LOCK Staking: Added score would be zero");
+        lockStaking.addLockTokenWithoutExtension(1);
+        vm.stopPrank();
+    }
+
+    function test_quote_add_lock_score_without_extension() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        uint256 lockDuration = 300 days;
+        uint256 initialAmount = 100 ether;
+        uint256 addAmount = 100 ether;
+        lockToken.approve(address(lockStaking), initialAmount);
+        lockStaking.addLockToken(initialAmount, lockDuration);
+
+        skip(150 days);
+
+        uint256 remainingTime = 150 days;
+        uint256 currentBasicRate = 1e12 + (150 days * lockStaking.basicRateDivider() * 1e12) / PRECISION;
+        uint256 timeProportion = Math.mulDiv(remainingTime, PRECISION, lockDuration);
+        uint256 baseDurationRate = lockStaking.durationRate(lockDuration);
+        uint256 effectiveRate = Math.mulDiv(baseDurationRate, currentBasicRate, PRECISION);
+        uint256 expectedAddedScore = Math.mulDiv(
+            addAmount,
+            Math.mulDiv(timeProportion, effectiveRate, PRECISION),
+            PRECISION
+        );
+
+        uint256 quotedScore = lockStaking.quoteAddLockScoreWithoutExtension(addAmount);
+        assertEq(quotedScore, expectedAddedScore, "Quoted score should match calculated value");
+
+        vm.stopPrank();
+    }
+
+    function test_quote_add_lock_score_without_extension_zero_amount() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        lockToken.approve(address(lockStaking), 100 ether);
+        lockStaking.addLockToken(100 ether, 300 days);
+        uint256 addedScore = lockStaking.quoteAddLockScoreWithoutExtension(0);
+        assertEq(addedScore, 0, "added score should be 0 for zero amount");
+        vm.stopPrank();
+    }
+
+    function test_quote_add_lock_score_without_extension_expired_lock() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        lockToken.approve(address(lockStaking), 100 ether);
+        lockStaking.addLockToken(100 ether, 30 days);
+        skip(31 days);
+        uint256 addedScore = lockStaking.quoteAddLockScoreWithoutExtension(10 ether);
+        assertEq(addedScore, 0, "added score should be 0 for expired lock");
+        vm.stopPrank();
+    }
+
+    function test_add_lock_token_without_extension_consecutive_calls() public {
+        initializeAndConfig();
+        vm.startPrank(ACCOUNT_ONE);
+        lockToken.approve(address(lockStaking), 200 ether);
+        lockStaking.addLockToken(100 ether, 300 days);
+
+        skip(100 days);
+        uint256 expectedScore1 = lockStaking.quoteAddLockScoreWithoutExtension(30 ether);
+        (uint256 amount1, uint256 score1,,,,,) = lockStaking.userInfo(ACCOUNT_ONE);
+        uint256 totalScore1 = lockStaking.totalLockScore();
+        lockStaking.addLockTokenWithoutExtension(30 ether);
+        (uint256 amount2, uint256 score2,,,,,) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(amount2, amount1 + 30 ether, "first: locked amount should increase by 30 ether");
+        assertEq(score2, score1 + expectedScore1, "first: score should increase correctly");
+        assertEq(lockStaking.totalLockScore(), totalScore1 + expectedScore1, "first: total score should increase correctly");
+
+        skip(50 days);
+        uint256 expectedScore2 = lockStaking.quoteAddLockScoreWithoutExtension(20 ether);
+        uint256 totalScore2 = lockStaking.totalLockScore();
+        lockStaking.addLockTokenWithoutExtension(20 ether);
+        (uint256 amount3, uint256 score3,,,,,) = lockStaking.userInfo(ACCOUNT_ONE);
+        assertEq(amount3, amount2 + 20 ether, "second: locked amount should increase by 20 ether");
+        assertEq(score3, score2 + expectedScore2, "second: score should increase correctly");
+        assertEq(lockStaking.totalLockScore(), totalScore2 + expectedScore2, "second: total score should increase correctly");
+
         vm.stopPrank();
     }
 }

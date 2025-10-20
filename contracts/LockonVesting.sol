@@ -33,15 +33,26 @@ contract LockonVesting is
     PausableUpgradeable
 {
     using SafeERC20 for ILockToken;
+
+    /* ============ Constants ============== */
+    /**
+     * @dev Maximum number of vesting periods per user-category pair
+     */
+    uint256 private constant MAX_PARALLEL_VESTING = 50;
+
     /* ============ Vesting Struct ============ */
 
     struct VestingWallet {
-        address userAddress; // The address of the user initiates the vesting
         uint256 vestingAmount; // The total amount of tokens granted for vesting
-        uint256 claimableAmount; // The total amount of tokens user can claim
+        uint256 carriedOverClaimableAmount; // Claimable amount carried over from previous vesting period
         uint256 claimedAmount; // The amount of tokens already released from vesting based on current schedule
         uint256 startTime; // The starting time of the vesting period
-        uint256 categoryId; // A category id associated with the vesting
+    }
+
+    enum DepositType {
+        NewSlot,           // 0: New vesting slot created
+        MaturedReuse,      // 1: Matured slot reused
+        ActiveOverwrite    // 2: Active slot overwritten
     }
 
     /* ============ State Variables ============ */
@@ -54,9 +65,12 @@ contract LockonVesting is
      */
     mapping(uint256 => uint256) public vestingCategories;
     /**
-     * @dev Mapping of user address to VestingWallet struct based on vesting category id, which stores vesting information
+     * @dev Mapping of user address to VestingWallet array based on vesting category id
+     * Each user-category pair can have up to MAX_PARALLEL_VESTING vesting periods
+     * @notice Array order is not guaranteed - periods may be in any order due to removals during claim operations
+     * Do not rely on array indices being stable or sorted by startTime
      */
-    mapping(address => mapping(uint256 => VestingWallet)) public userVestingWallet;
+    mapping(address => mapping(uint256 => VestingWallet[])) public userVestingWallets;
     /**
      * @dev Mapping that keeps track of whether each address is allowed to deposit to LOCKON Vesting contract
      */
@@ -104,6 +118,7 @@ contract LockonVesting is
      * @param vestingAmount Total granted amount for vesting
      * @param startTime Starting time of the new vesting
      * @param categoryId A category id associated with the vesting schedule
+     * @param depositType Type of deposit (NewSlot/MaturedReuse/ActiveOverwrite)
      */
     event VestingDeposited(
         address indexed sender,
@@ -111,7 +126,8 @@ contract LockonVesting is
         uint256 depositAmount,
         uint256 vestingAmount,
         uint256 startTime,
-        uint256 categoryId
+        uint256 categoryId,
+        DepositType depositType
     );
 
     /**
@@ -187,65 +203,178 @@ contract LockonVesting is
         }
     }
 
+    /* ============ View Functions ============ */
+
     /**
-     * @dev This view function returns a specific timestamp at which vesting process end.
+     * @dev This view function returns the latest end timestamp among all vesting periods
      *
      * @param user Address of the user initiates the vesting
      * @param categoryId A category id associated with the vesting schedule
+     * @return latestEndTime The latest end timestamp (0 if no vesting periods exist)
      */
     function getVestingEndTime(address user, uint256 categoryId) external view returns (uint256) {
-        return userVestingWallet[user][categoryId].startTime + vestingCategories[categoryId];
-    }
+        VestingWallet[] storage wallets = userVestingWallets[user][categoryId];
+        uint256 vestingPeriod = vestingCategories[categoryId];
+        uint256 latestEndTime = 0;
 
-    /**
-     * @dev Calculates the total claimable amount of LOCK tokens, based on the elapsed time
-     *
-     * @param user Address of the user initiates the vesting
-     * @param categoryId A category id associated with the vesting schedule
-     * @return The amount of tokens that can be claimed
-     */
-    function currentTotalClaimable(address user, uint256 categoryId) external view returns (uint256) {
-        VestingWallet storage vestingInfo = userVestingWallet[user][categoryId];
-        if (vestingInfo.vestingAmount == 0) {
-            return 0;
-        }
-        uint256 vestingPeriods = vestingCategories[categoryId];
-        if (vestingPeriods != 0) {
-            uint256 timeDiff = block.timestamp - vestingInfo.startTime;
-            uint256 claimableAmount = (vestingInfo.vestingAmount * timeDiff / vestingPeriods);
-
-            if (claimableAmount < vestingInfo.vestingAmount) {
-                return vestingInfo.claimableAmount + claimableAmount - vestingInfo.claimedAmount;
+        for (uint256 i = 0; i < wallets.length;) {
+            uint256 endTime = wallets[i].startTime + vestingPeriod;
+            if (endTime > latestEndTime) {
+                latestEndTime = endTime;
+            }
+            unchecked {
+                ++i;
             }
         }
 
-        return vestingInfo.claimableAmount + vestingInfo.vestingAmount - vestingInfo.claimedAmount;
+        return latestEndTime;
     }
 
     /**
-     * @dev Calculates the cumulative amount of LOCK tokens vested in the current vesting schedule
+     * @dev Calculates the claimable and locked amounts of LOCK tokens across all vesting periods
      *
      * @param user Address of the user initiates the vesting
      * @param categoryId A category id associated with the vesting schedule
-     * @return The cumulative amount of LOCK tokens vested in the current schedule
+     * @return claimableAmount The total amount of tokens that can be claimed now
+     * @return lockedAmount The total amount of tokens held in the contract for this user (including both claimable and unvested amounts)
      */
-    function _claimable(address user, uint256 categoryId) private view returns (uint256) {
-        VestingWallet storage vestingInfo = userVestingWallet[user][categoryId];
-        if (vestingInfo.vestingAmount == 0) {
-            return 0;
+    function getVestingStatus(address user, uint256 categoryId) external view returns (uint256 claimableAmount, uint256 lockedAmount) {
+        VestingWallet[] storage wallets = userVestingWallets[user][categoryId];
+        uint256 vestingPeriod = vestingCategories[categoryId];
+
+        for (uint256 i = 0; i < wallets.length;) {
+            VestingWallet storage wallet = wallets[i];
+            uint256 claimable = _claimable(wallet, vestingPeriod);
+            claimableAmount += wallet.carriedOverClaimableAmount + claimable - wallet.claimedAmount;
+            lockedAmount += wallet.carriedOverClaimableAmount + wallet.vestingAmount - wallet.claimedAmount;
+            unchecked {
+                ++i;
+            }
         }
 
-        uint256 vestingPeriods = vestingCategories[categoryId];
-        if (vestingPeriods != 0) {
-            uint256 timeDiff = block.timestamp - vestingInfo.startTime;
-            uint256 claimableAmount = (vestingInfo.vestingAmount * timeDiff / vestingPeriods);
+        return (claimableAmount, lockedAmount);
+    }
 
-            if (claimableAmount < vestingInfo.vestingAmount) {
+    /**
+     * @dev Returns the number of available vesting slots for a user-category pair
+     * Matured periods are considered available
+     *
+     * @param user Address of the user
+     * @param categoryId A category id associated with the vesting schedule
+     * @return Number of available slots (0 to MAX_PARALLEL_VESTING)
+     */
+    function getAvailableSlots(address user, uint256 categoryId) external view returns (uint256) {
+        VestingWallet[] storage wallets = userVestingWallets[user][categoryId];
+        uint256 vestingPeriod = vestingCategories[categoryId];
+
+        uint256 maturedCount = 0;
+        for (uint256 i = 0; i < wallets.length;) {
+            if (block.timestamp >= wallets[i].startTime + vestingPeriod) {
+                unchecked {
+                    ++maturedCount;
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
+        uint256 activeSlots = wallets.length - maturedCount;
+        if (activeSlots >= MAX_PARALLEL_VESTING) {
+            return 0;
+        }
+        return MAX_PARALLEL_VESTING - activeSlots;
+    }
+
+    /**
+     * @dev Returns information about the oldest active (non-matured) vesting period
+     *
+     * @param user Address of the user
+     * @param categoryId A category id associated with the vesting schedule
+     * @return vestingAmount Remaining vesting amount (excluding claimable amount)
+     * @return endTime End time of the oldest active vesting period
+     */
+    function getOldestActiveVestingInfo(address user, uint256 categoryId) external view returns (uint256 vestingAmount, uint256 endTime) {
+        VestingWallet[] storage wallets = userVestingWallets[user][categoryId];
+        uint256 vestingPeriod = vestingCategories[categoryId];
+        (, uint256 oldestActiveIndex) = _findOldestPeriods(wallets, vestingPeriod);
+        require(oldestActiveIndex != type(uint256).max, "LOCKON Vesting: No active vesting periods found");
+
+        VestingWallet storage wallet = wallets[oldestActiveIndex];
+        uint256 claimable = _claimable(wallet, vestingPeriod);
+        vestingAmount = wallet.vestingAmount - claimable;
+        endTime = wallet.startTime + vestingPeriod;
+    }
+
+    /* ============ Private Functions ============ */
+
+    /**
+     * @dev Calculates the claimable amount for a specific vesting period
+     *
+     * @param wallet Storage reference to the vesting wallet
+     * @param vestingPeriod The vesting period for the category
+     * @return The claimable amount for the specified vesting period
+     */
+    function _claimable(VestingWallet storage wallet, uint256 vestingPeriod) private view returns (uint256) {
+        if (vestingPeriod != 0) {
+            uint256 timeDiff = block.timestamp - wallet.startTime;
+            uint256 claimableAmount = (wallet.vestingAmount * timeDiff) / vestingPeriod;
+            if (claimableAmount < wallet.vestingAmount) {
                 return claimableAmount;
             }
         }
 
-        return vestingInfo.vestingAmount;
+        return wallet.vestingAmount;
+    }
+
+    /**
+     * @dev Finds both the oldest matured period and oldest active (non-matured) period in one pass
+     *
+     * @param wallets Storage reference to the vesting wallets array
+     * @param vestingPeriod The vesting period for the category
+     * @return oldestMaturedIndex Index of oldest matured period (type(uint256).max if none)
+     * @return oldestActiveIndex Index of oldest active (non-matured) period (type(uint256).max if none)
+     */
+    function _findOldestPeriods(
+        VestingWallet[] storage wallets,
+        uint256 vestingPeriod
+    ) internal view returns (uint256 oldestMaturedIndex, uint256 oldestActiveIndex) {
+        require(wallets.length > 0, "LOCKON Vesting: No vesting periods found");
+
+        oldestMaturedIndex = type(uint256).max;
+        oldestActiveIndex = type(uint256).max;
+        uint256 oldestMaturedTime = type(uint256).max;
+        uint256 oldestActiveTime = type(uint256).max;
+
+        for (uint256 i = 0; i < wallets.length;) {
+            VestingWallet storage wallet = wallets[i];
+            uint256 startTime = wallet.startTime;
+            bool isMatured = block.timestamp >= startTime + vestingPeriod;
+            if (isMatured) {
+                if (startTime < oldestMaturedTime) {
+                    oldestMaturedTime = startTime;
+                    oldestMaturedIndex = i;
+                }
+            } else {
+                if (startTime < oldestActiveTime) {
+                    oldestActiveTime = startTime;
+                    oldestActiveIndex = i;
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /**
+     * @dev Removes a vesting period from the array using swap-and-pop
+     *
+     * @param wallets Storage reference to the vesting wallets array
+     * @param index Index of the vesting period to remove
+     */
+    function _removeVestingPeriod(VestingWallet[] storage wallets, uint256 index) internal {
+        wallets[index] = wallets[wallets.length - 1];
+        wallets.pop();
     }
 
     /* ============ External Functions ============ */
@@ -266,29 +395,62 @@ contract LockonVesting is
     {
         require(amount != 0, "LOCKON Vesting: Vesting amount must be greater than 0");
         require(user != address(0), "LOCKON Vesting: Zero address not allowed");
-        require(vestingCategories[categoryId] != 0, "LOCKON Vesting: Category do not exist");
+        uint256 vestingPeriod = vestingCategories[categoryId];
+        require(vestingPeriod != 0, "LOCKON Vesting: Category do not exist");
         require(
             !lockToken.isBlacklisted(user), "LOCKON Vesting: User has been banned from all activities in LOCKON Vesting"
         );
 
-        VestingWallet storage vestingInfo = userVestingWallet[user][categoryId];
-        uint256 claimableAmount = _claimable(user, categoryId);
-        // Calculate based on the cumulative claimable vested amount of the current vesting and the previous
-        // vesting schedules and deduct the vested amount user had claimed in the current vesting
-        vestingInfo.claimableAmount = claimableAmount + vestingInfo.claimableAmount - vestingInfo.claimedAmount;
-        // Calculate vesting amount based on new amount and the remaining
-        vestingInfo.vestingAmount = vestingInfo.vestingAmount + amount - claimableAmount;
-        // Start a new vesting schedule
-        vestingInfo.startTime = block.timestamp;
-        vestingInfo.claimedAmount = 0;
+        VestingWallet[] storage wallets = userVestingWallets[user][categoryId];
+
+        (uint256 oldestMaturedIndex, uint256 oldestActiveIndex) = wallets.length > 0
+            ? _findOldestPeriods(wallets, vestingPeriod)
+            : (type(uint256).max, type(uint256).max);
+
+        // If matured slots exist, reuse the oldest matured slot
+        if (oldestMaturedIndex != type(uint256).max) {
+            VestingWallet storage maturedWallet = wallets[oldestMaturedIndex];
+            uint256 claimable = _claimable(maturedWallet, vestingPeriod);
+            uint256 accumulated = maturedWallet.carriedOverClaimableAmount + claimable - maturedWallet.claimedAmount;
+            maturedWallet.vestingAmount = amount;
+            maturedWallet.carriedOverClaimableAmount = accumulated;
+            maturedWallet.claimedAmount = 0;
+            maturedWallet.startTime = block.timestamp;
+            lockToken.safeTransferFrom(msg.sender, address(this), amount);
+            emit VestingDeposited(msg.sender, user, amount, maturedWallet.vestingAmount, maturedWallet.startTime, categoryId, DepositType.MaturedReuse);
+            return;
+        }
+
+        // If available slots exist, create a new slot
+        if (wallets.length < MAX_PARALLEL_VESTING) {
+            VestingWallet memory newWallet = VestingWallet({
+                vestingAmount: amount,
+                carriedOverClaimableAmount: 0,
+                claimedAmount: 0,
+                startTime: block.timestamp
+            });
+            wallets.push(newWallet);
+            lockToken.safeTransferFrom(msg.sender, address(this), amount);
+            emit VestingDeposited(msg.sender, user, amount, newWallet.vestingAmount, newWallet.startTime, categoryId, DepositType.NewSlot);
+            return;
+        }
+
+        // If all slots full and no matured slots, update the oldest active period
+        VestingWallet storage oldestWallet = wallets[oldestActiveIndex];
+        uint256 oldestClaimable = _claimable(oldestWallet, vestingPeriod);
+        uint256 oldestAccumulated = oldestClaimable + oldestWallet.carriedOverClaimableAmount - oldestWallet.claimedAmount;
+        uint256 remainingVesting = oldestWallet.vestingAmount - oldestClaimable;
+        oldestWallet.vestingAmount = remainingVesting + amount;
+        oldestWallet.carriedOverClaimableAmount = oldestAccumulated;
+        oldestWallet.claimedAmount = 0;
+        oldestWallet.startTime = block.timestamp;
 
         lockToken.safeTransferFrom(msg.sender, address(this), amount);
-
-        emit VestingDeposited(msg.sender, user, amount, vestingInfo.vestingAmount, vestingInfo.startTime, categoryId);
+        emit VestingDeposited(msg.sender, user, amount, oldestWallet.vestingAmount, oldestWallet.startTime, categoryId, DepositType.ActiveOverwrite);
     }
 
     /**
-     * Allows user to claim all vested tokens
+     * Allows user to claim all vested tokens from all vesting periods
      *
      * @param categoryId A category id associated with the vesting schedule
      */
@@ -297,23 +459,31 @@ contract LockonVesting is
             !lockToken.isBlacklisted(msg.sender),
             "LOCKON Vesting: User has been banned from all activities in LOCKON Vesting"
         );
-        uint256 claimableAmount = _claimable(msg.sender, categoryId);
-        VestingWallet storage vestingInfo = userVestingWallet[msg.sender][categoryId];
-        require(
-            claimableAmount != 0 || (vestingInfo.claimableAmount - vestingInfo.claimedAmount != 0),
-            "LOCKON Vesting: User has nothing to claim"
-        );
 
-        // Calculate based on the cumulative claimable vested amount of the current vesting and the previous
-        // vesting schedules and deduct the vested amount user had claimed in the current vesting
-        uint256 totalTokenClaim = claimableAmount + vestingInfo.claimableAmount - vestingInfo.claimedAmount;
-        vestingInfo.claimedAmount = claimableAmount;
-        // Reset the cumulative claimable vested amount
-        vestingInfo.claimableAmount = 0;
+        VestingWallet[] storage wallets = userVestingWallets[msg.sender][categoryId];
+        uint256 vestingPeriod = vestingCategories[categoryId];
 
-        lockToken.safeTransfer(msg.sender, totalTokenClaim);
+        uint256 totalClaimable = 0;
+        for (uint256 i = wallets.length; i > 0;) {
+            unchecked {
+                --i;
+            }
+            VestingWallet storage wallet = wallets[i];
+            uint256 claimable = _claimable(wallet, vestingPeriod);
+            totalClaimable += claimable + wallet.carriedOverClaimableAmount - wallet.claimedAmount;
 
-        emit VestingClaimed(msg.sender, categoryId, totalTokenClaim);
+            bool isMatured = block.timestamp >= wallet.startTime + vestingPeriod;
+            if (isMatured) {
+                _removeVestingPeriod(wallets, i);
+            } else {
+                wallet.claimedAmount = claimable;
+                wallet.carriedOverClaimableAmount = 0;
+            }
+        }
+        require(totalClaimable > 0, "LOCKON Vesting: User has nothing to claim");
+
+        lockToken.safeTransfer(msg.sender, totalClaimable);
+        emit VestingClaimed(msg.sender, categoryId, totalClaimable);
     }
 
     /* ============ PRIVILEGED OWNER / GOVERNANCE Functions ============ */

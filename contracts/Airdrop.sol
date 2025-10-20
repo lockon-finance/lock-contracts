@@ -294,6 +294,10 @@ contract Airdrop is
      * @param _lockAmount The LOCK token amount to be withdrawn
      */
     function deallocateLockToken(uint256 _lockAmount) external onlyOwner nonReentrant {
+        require(
+            lockToken.balanceOf(address(this)) >= totalPendingAirdropAmount + _lockAmount,
+            "Airdrop: not enough excess"
+        );
         lockToken.safeTransfer(msg.sender, _lockAmount);
         emit LockTokenDeallocated(msg.sender, _lockAmount);
     }

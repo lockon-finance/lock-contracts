@@ -344,4 +344,36 @@ contract AirdropTest is Test {
         assertEq(airdrop.userPendingReward(listUser[0]), 40);
         assertEq(airdrop.userPendingReward(listUser[1]), 30);
     }
+
+    function test_deallocateLockToken_withdraw_exact_excess_pending_positive() public {
+        initializeAndConfig();
+        vm.startPrank(OWNER);
+        address[] memory listUser = new address[](1);
+        uint256[] memory listAmount = new uint256[](1);
+        listUser[0] = address(bytes20(bytes("user1")));
+        listAmount[0] = 1000 ether;
+        airdrop.distributeAirdropReward(listUser, listAmount);
+        uint256 balance = lockToken.balanceOf(address(airdrop));
+        uint256 pending = airdrop.totalPendingAirdropAmount();
+        uint256 exactExcess = balance - pending;
+        uint256 ownerBefore = lockToken.balanceOf(OWNER);
+        airdrop.deallocateLockToken(exactExcess);
+        assertEq(lockToken.balanceOf(OWNER), ownerBefore + exactExcess);
+        assertEq(lockToken.balanceOf(address(airdrop)), airdrop.totalPendingAirdropAmount());
+    }
+
+    function test_deallocateLockToken_fail_excess_plus_one_pending_positive() public {
+        initializeAndConfig();
+        vm.startPrank(OWNER);
+        address[] memory listUser = new address[](1);
+        uint256[] memory listAmount = new uint256[](1);
+        listUser[0] = address(bytes20(bytes("user1")));
+        listAmount[0] = 1000 ether;
+        airdrop.distributeAirdropReward(listUser, listAmount);
+        uint256 balance = lockToken.balanceOf(address(airdrop));
+        uint256 pending = airdrop.totalPendingAirdropAmount();
+        uint256 excess = balance - pending;
+        vm.expectRevert("Airdrop: not enough excess");
+        airdrop.deallocateLockToken(excess + 1);
+    }
 }

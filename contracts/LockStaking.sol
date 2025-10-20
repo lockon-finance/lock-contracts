@@ -10,6 +10,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "./interfaces/ILockonVesting.sol";
 
@@ -70,6 +71,10 @@ contract LockStaking is
      * @dev Represents the category LOCK STAKING in the LOCKON vesting
      */
     uint256 private constant LOCK_STAKING_VESTING_CATEGORY_ID = 0;
+    /**
+     * @dev Maximum penalty rate (30%)
+     */
+    uint256 private constant PENALTY_RATE_CAP = 300_000_000_000;
 
     /* ============ State Variables ============ */
     /**
@@ -174,6 +179,29 @@ contract LockStaking is
         uint256 lockedAmount,
         uint256 lockDuration,
         uint256 lastBasicRate,
+        uint256 rewardDebt,
+        uint256 lockEndTimestamp
+    );
+
+    /**
+     * Emitted when a user adds LOCK tokens without extending the lock duration
+     *
+     * @param sender Address of the function executor
+     * @param lockedAmount Amount of LOCK tokens added
+     * @param addedScore Score added from this transaction
+     * @param residualSec Remaining lock time in seconds at the time of addition
+     * @param lockDuration Current lock duration
+     * @param currentBasicRate Current basic rate used for calculating the added score (NOT the stored lastBasicRate)
+     * @param rewardDebt User's accumulated reward debt after adding tokens
+     * @param lockEndTimestamp Timestamp representing the end of the lock duration
+     */
+    event LockTokenAddedWithoutExtension(
+        address indexed sender,
+        uint256 lockedAmount,
+        uint256 addedScore,
+        uint256 residualSec,
+        uint256 lockDuration,
+        uint256 currentBasicRate,
         uint256 rewardDebt,
         uint256 lockEndTimestamp
     );
@@ -394,7 +422,7 @@ contract LockStaking is
         // Set the deployed contract time as the time that LOCK token get released
         lockTokenReleasedTimestamp = block.timestamp;
         // Set penalty rate currently fixed at 30%
-        penaltyRate = 300_000_000_000;
+        penaltyRate = PENALTY_RATE_CAP;
         minimumLockDuration = 30 days;
     }
 
@@ -465,6 +493,29 @@ contract LockStaking is
         userLockAmount += _lockAmount;
         (, uint256 newLockDuration) = _calculateLockTimestamp(_currentUserInfo.lockEndTimestamp, _lockDuration, now_);
         return (userLockAmount * basicRate() * durationRate(newLockDuration)) / PRECISION / PRECISION;
+    }
+
+    /**
+     * @dev Calculates and returns the added score for adding tokens without extension
+     * @param _amount   Amount of LOCK tokens to add
+     * @return addedScore The added LOCK score
+     */
+    function quoteAddLockScoreWithoutExtension(uint256 _amount)
+        public
+        view
+        returns (uint256 addedScore)
+    {
+        UserInfo storage _currentUserInfo = userInfo[msg.sender];
+        uint256 now_ = block.timestamp;
+        if (_currentUserInfo.lockEndTimestamp <= now_) return 0;
+
+        uint256 residualSec = _currentUserInfo.lockEndTimestamp - now_;
+        addedScore = _calcAddedScoreWithoutExtension(
+            _amount,
+            residualSec,
+            _currentUserInfo.lockDuration,
+            basicRate()
+        );
     }
 
     /**
@@ -579,6 +630,61 @@ contract LockStaking is
     }
 
     /**
+     * @dev Allows users to add LOCK tokens without extending the lock duration
+     * The added score is calculated proportionally to the remaining lock time
+     * Uses the current basic rate for the added amount only
+     * Does not update lastBasicRate to maintain consistency with withdrawLockToken
+     *
+     * @param _lockAmount Amount of LOCK tokens to add
+     */
+    function addLockTokenWithoutExtension(uint256 _lockAmount) external whenNotPaused nonReentrant {
+        uint256 now_ = block.timestamp;
+        require(_lockAmount != 0, "LOCK Staking: Locked amount must be greater than 0");
+        _updatePool();
+        UserInfo storage _currentUserInfo = userInfo[msg.sender];
+        require(_currentUserInfo.lockEndTimestamp > now_, "LOCK Staking: no active lock");
+
+        if (_currentUserInfo.lockScore > 0) {
+            uint256 pending = ((_currentUserInfo.lockScore * rewardPerScore) / PRECISION) - _currentUserInfo.rewardDebt;
+            if (pending > 0) {
+                _currentUserInfo.cumulativePendingReward += pending;
+            }
+        }
+
+        uint256 _currentBasicRate = basicRate();
+        uint256 residualSec = _currentUserInfo.lockEndTimestamp - now_;
+        uint256 addedScore = _calcAddedScoreWithoutExtension(
+            _lockAmount,
+            residualSec,
+            _currentUserInfo.lockDuration,
+            _currentBasicRate
+        );
+        require(addedScore > 0, "LOCK Staking: Added score would be zero");
+
+        _currentUserInfo.lockedAmount += _lockAmount;
+        uint256 userLockScore = _currentUserInfo.lockScore + addedScore;
+        _currentUserInfo.lockScore = userLockScore;
+        _currentUserInfo.rewardDebt = (userLockScore * rewardPerScore) / PRECISION;
+
+        totalLockedAmount += _lockAmount;
+        totalLockScore += addedScore;
+
+        lockToken.safeTransferFrom(msg.sender, address(this), _lockAmount);
+
+        emit UserLockScoreChanged(msg.sender, userLockScore);
+        emit LockTokenAddedWithoutExtension(
+            msg.sender,
+            _lockAmount,
+            addedScore,
+            residualSec,
+            _currentUserInfo.lockDuration,
+            _currentBasicRate,
+            _currentUserInfo.rewardDebt,
+            _currentUserInfo.lockEndTimestamp
+        );
+    }
+
+    /**
      * Allows an user to extend the lock duration of their staked LOCK Token
      *
      * Requirements:
@@ -647,10 +753,11 @@ contract LockStaking is
         }
 
         // Calculate user LOCK score after withdraw
-        uint256 userLockScore = (
-            (_currentUserInfo.lockedAmount - _amount) * _currentUserInfo.lastBasicRate
-                * durationRate(_currentUserInfo.lockDuration)
-        ) / PRECISION / PRECISION;
+        uint256 userLockScore = Math.mulDiv(
+            _currentUserInfo.lockScore,
+            _currentUserInfo.lockedAmount - _amount,
+            _currentUserInfo.lockedAmount
+        );
 
         uint256 _penaltyFee;
         // Check if the user is withdrawing early to apply a penalty fee
@@ -728,7 +835,7 @@ contract LockStaking is
     }
 
     /**
-     * @dev Allows a user to cancel a staking reward claim order for a specific pool
+     * @dev Allows a user to cancel a staking reward claim order
      *
      * @param _requestId An ID for the staking reward claim order
      * @param _claimAmount The amount of reward tokens in the claim order
@@ -845,6 +952,7 @@ contract LockStaking is
      * @param _penaltyRate The new value for the penalty rate
      */
     function setPenaltyRate(uint256 _penaltyRate) external onlyOwner {
+        require(_penaltyRate <= PENALTY_RATE_CAP, "LOCK Staking: penalty rate exceeds cap");
         penaltyRate = _penaltyRate;
         emit PenaltyRateUpdated(msg.sender, penaltyRate, block.timestamp);
     }
@@ -886,6 +994,30 @@ contract LockStaking is
             require(newDuration >= durationLeft, "LOCK Staking: Invalid lock duration");
         }
         return (now_ + newDuration, newDuration);
+    }
+
+    /**
+     * @dev Calculate added score for adding tokens without extension
+     *
+     * @param _amount Amount of tokens to add
+     * @param _residualSec Remaining lock time in seconds
+     * @param _lockDuration Original lock duration
+     * @param _basicRate Basic rate to use for calculation
+     */
+    function _calcAddedScoreWithoutExtension(
+        uint256 _amount,
+        uint256 _residualSec,
+        uint256 _lockDuration,
+        uint256 _basicRate
+    ) private pure returns (uint256 addedScore) {
+        uint256 timeProportionRate = Math.mulDiv(_residualSec, PRECISION, _lockDuration);
+        uint256 baseDurationRate = durationRate(_lockDuration);
+        uint256 effectiveRate = Math.mulDiv(baseDurationRate, _basicRate, PRECISION);
+        addedScore = Math.mulDiv(
+            _amount,
+            Math.mulDiv(timeProportionRate, effectiveRate, PRECISION),
+            PRECISION
+        );
     }
 
     /* ============ Verify signature Functions ============ */
