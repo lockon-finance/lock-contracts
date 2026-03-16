@@ -1,6 +1,11 @@
 import fs from "fs";
 import path from "path";
-import { defender } from "hardhat";
+import util from "util";
+import { ethers, network } from "hardhat";
+import SafeApiKit from "@safe-global/api-kit";
+import Safe from "@safe-global/protocol-kit";
+import { MetaTransactionData, OperationType } from "@safe-global/types-kit";
+import { Ownable__factory, UUPSUpgradeable__factory } from "../../typechain-types";
 
 function getEnv(name: string) {
   return process.env[name];
@@ -24,6 +29,9 @@ export function getEnvParams() {
   const initialIndexTokenVestingCategoryIds = getEnvRequired("INITIAL_INDEX_TOKEN_VESTING_CATEGORY_IDS");
   const stableTokenAddress = getEnvRequired("STABLE_TOKEN_ADDRESS");
   const ownerAddress = getEnvRequired("OWNER_ADDRESS");
+  const safeApiKey = getEnvRequired("SAFE_API_KEY");
+  const safeProposerAddress = getEnvRequired("SAFE_PROPOSER_ADDRESS");
+  const safeProposerPrivateKey = getEnvRequired("SAFE_PROPOSER_PRIVATE_KEY");
 
   const initialIndexTokenAddressArray = initialIndexTokenAddresses.split(",");
   const initialIndexTokenVestingCategoryIdArray = initialIndexTokenVestingCategoryIds.split(",");
@@ -43,22 +51,10 @@ export function getEnvParams() {
     initialIndexTokenVestingCategoryIds: initialIndexTokenVestingCategoryIdArray,
     stableTokenAddress,
     ownerAddress,
+    safeApiKey,
+    safeProposerAddress,
+    safeProposerPrivateKey,
   };
-}
-
-export async function getDefenderUpgradeApprovalOwnerAddress() {
-  const envOwnerAddress = getEnvRequired("OWNER_ADDRESS");
-  const approvalProcess = await defender.getUpgradeApprovalProcess();
-  if (approvalProcess.address !== envOwnerAddress) {
-    throw new Error(
-      `Upgrade approval process with id ${approvalProcess.approvalProcessId} has an address ${approvalProcess.address} that does not match the expected owner address ${envOwnerAddress}.`,
-    );
-  }
-  return approvalProcess.address;
-}
-
-export async function validateDefenderUpgradeApprovalOwnerAddress() {
-  await getDefenderUpgradeApprovalOwnerAddress();
 }
 
 export function getContracts(network: string) {
@@ -72,6 +68,23 @@ export function getContracts(network: string) {
   return JSON.parse(String(json));
 }
 
+export function getExplorers(network: string) {
+  switch (network) {
+    case "sepolia":
+      return "https://sepolia.etherscan.io/";
+    case "arbitrumSepolia":
+      return "https://sepolia.arbiscan.io/";
+    case "mainnet":
+      return "https://etherscan.io/";
+    case "polygon":
+      return "https://polygonscan.com/";
+    case "arbitrum":
+      return "https://arbiscan.io/";
+    default:
+      throw new Error(`Unknown network: ${network}`);
+  }
+}
+
 export function saveContract(network: string, contract: string, address: string) {
   const env = process.env.NODE_ENV;
 
@@ -82,4 +95,67 @@ export function saveContract(network: string, contract: string, address: string)
     path.join(__dirname, `../../deployed-addresses/${env}.${network}.contract-addresses.json`),
     JSON.stringify(addresses, null, "    "),
   );
+}
+
+export async function proposeSafeUpgrade(
+  proxyAddress: string,
+  newImplementationAddress: string,
+  initData?: string,
+): Promise<string> {
+  const envParams = getEnvParams();
+  const chainId = BigInt(Number(network.config.chainId));
+  const apiKit = new SafeApiKit({ chainId: chainId, apiKey: envParams.safeApiKey });
+
+  const uups = Ownable__factory.connect(proxyAddress, ethers.provider);
+  const uupsOwner = await uups.owner();
+
+  if (uupsOwner !== envParams.ownerAddress) {
+    throw new Error(`uupsOwner ${uupsOwner} does not match envParams.owner ${envParams.ownerAddress}`);
+  }
+
+  const protocolKitOwner = await Safe.init({
+    provider: network.provider,
+    signer: envParams.safeProposerPrivateKey,
+    safeAddress: envParams.ownerAddress,
+  });
+
+  const iface = UUPSUpgradeable__factory.createInterface();
+
+  const calldata = initData
+    ? iface.encodeFunctionData("upgradeToAndCall", [newImplementationAddress, initData])
+    : iface.encodeFunctionData("upgradeToAndCall", [newImplementationAddress, "0x"]);
+
+  const safeTransactionData: MetaTransactionData = {
+    to: proxyAddress,
+    value: "0",
+    data: calldata,
+    operation: OperationType.Call,
+  };
+
+  // Validate TX before proposing.
+  await apiKit
+    .estimateSafeTransaction(envParams.ownerAddress, {
+      ...safeTransactionData,
+      operation: Number(OperationType.Call),
+    })
+    .catch(error => {
+      throw new Error(`Gas Estimation (TX Validation) failed: ${util.inspect(error, { depth: null })}`);
+    });
+
+  const safeTransaction = await protocolKitOwner.createTransaction({
+    transactions: [safeTransactionData],
+  });
+
+  const safeTxHash = await protocolKitOwner.getTransactionHash(safeTransaction);
+  const signature = await protocolKitOwner.signHash(safeTxHash);
+
+  await apiKit.proposeTransaction({
+    safeAddress: envParams.ownerAddress,
+    safeTransactionData: safeTransaction.data,
+    safeTxHash,
+    senderAddress: envParams.safeProposerAddress,
+    senderSignature: signature.data,
+  });
+
+  return `https://app.safe.global/transactions/tx?id=multisig_${envParams.ownerAddress}_${safeTxHash}&safe=${network.name}:${envParams.ownerAddress}`;
 }

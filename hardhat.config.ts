@@ -23,10 +23,6 @@ const config: HardhatUserConfig = {
       },
     },
   },
-  defender: {
-    apiKey: process.env.DEFENDER_KEY as string,
-    apiSecret: process.env.DEFENDER_SECRET as string,
-  },
   networks: {
     hardhat: {
       gas: 12000000,
@@ -37,8 +33,10 @@ const config: HardhatUserConfig = {
       },
     },
     sepolia: {
+      chainId: 11155111,
       url: `https://sepolia.infura.io/v3/${infuraKey}`,
       accounts: [privateKey],
+      timeout: 20000,
     },
     arbitrumSepolia: {
       chainId: 421614,

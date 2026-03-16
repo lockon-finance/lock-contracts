@@ -1,10 +1,9 @@
-import { ethers, network, defender } from "hardhat";
+import { ethers, network, upgrades } from "hardhat";
 
 import {
   getContracts,
   getEnvParams,
   saveContract,
-  getDefenderUpgradeApprovalOwnerAddress,
 } from "./utils/deploy-helper";
 import { encodeBytes32String } from "ethers";
 
@@ -16,7 +15,7 @@ async function main() {
   }
 
   const LockonReferral = await ethers.getContractFactory("LockonReferral");
-  const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
+  const ownerAddress = envParams.ownerAddress;
 
   const referralTypes = [
     encodeBytes32String("investor"),
@@ -25,7 +24,7 @@ async function main() {
   ];
   const vestingCategoryIds = [10000, 10001, 10002];
   const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-  const lockonReferral = await defender.deployProxy(
+  const lockonReferral = await upgrades.deployProxy(
     LockonReferral,
     [
       ownerAddress,

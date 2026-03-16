@@ -1,16 +1,22 @@
-import { ethers, network, defender } from "hardhat";
-
-import { getContracts, validateDefenderUpgradeApprovalOwnerAddress } from "./utils/deploy-helper";
+import { ethers, network, upgrades } from "hardhat";
+import { getContracts, proposeSafeUpgrade } from "./utils/deploy-helper";
 
 async function main() {
   const contracts = getContracts(network.name)[network.name];
+  const proxyAddress = contracts.lockonReferral;
 
   const LockonReferral = await ethers.getContractFactory("LockonReferral");
-  await validateDefenderUpgradeApprovalOwnerAddress();
 
-  const proposal = await defender.proposeUpgradeWithApproval(contracts.lockonReferral, LockonReferral);
+  const newImpl = await upgrades.prepareUpgrade(proxyAddress, LockonReferral);
 
-  console.log(`Lockon Referral Upgrade proposed with URL: ${proposal.url}`);
+  console.log(`New implementation deployed at: ${newImpl}`);
+
+  const proposalUrl = await proposeSafeUpgrade(
+    proxyAddress,
+    newImpl.toString(),
+  );
+
+  console.log(`Lockon Referral Upgrade proposed with URL: ${proposalUrl}`);
 }
 
 main().catch(error => {

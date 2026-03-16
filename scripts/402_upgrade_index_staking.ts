@@ -1,17 +1,22 @@
-import { ethers, network, run, defender } from "hardhat";
-
-import { getContracts, getEnvParams, validateDefenderUpgradeApprovalOwnerAddress } from "./utils/deploy-helper";
+import { ethers, network, upgrades } from "hardhat";
+import { getContracts, proposeSafeUpgrade } from "./utils/deploy-helper";
 
 async function main() {
-  const envParams = getEnvParams();
   const contracts = getContracts(network.name)[network.name];
+  const proxyAddress = contracts.indexStaking;
 
   const IndexStaking = await ethers.getContractFactory("IndexStaking");
-  await validateDefenderUpgradeApprovalOwnerAddress();
 
-  const proposal = await defender.proposeUpgradeWithApproval(contracts.indexStaking, IndexStaking);
+  const newImpl = await upgrades.prepareUpgrade(proxyAddress, IndexStaking);
 
-  console.log(`Index Staking Upgrade proposed with URL: ${proposal.url}`);
+  console.log(`New implementation deployed at: ${newImpl}`);
+
+  const proposalUrl = await proposeSafeUpgrade(
+    proxyAddress,
+    newImpl.toString(),
+  );
+
+  console.log(`Index Staking Upgrade proposed with URL: ${proposalUrl}`);
 }
 
 main().catch(error => {

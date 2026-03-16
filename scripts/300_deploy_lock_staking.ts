@@ -1,10 +1,9 @@
-import { ethers, network, run, defender } from "hardhat";
+import { ethers, network, run, upgrades } from "hardhat";
 
 import {
   getContracts,
   getEnvParams,
   saveContract,
-  getDefenderUpgradeApprovalOwnerAddress,
 } from "./utils/deploy-helper";
 
 async function main() {
@@ -15,10 +14,10 @@ async function main() {
   }
 
   const LockStaking = await ethers.getContractFactory("LockStaking");
-  const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
+  const ownerAddress = envParams.ownerAddress;
 
   const startTimestamp = Math.floor(Date.now() / 1000);
-  const lockStaking = await defender.deployProxy(
+  const lockStaking = await upgrades.deployProxy(
     LockStaking,
     [
       ownerAddress,

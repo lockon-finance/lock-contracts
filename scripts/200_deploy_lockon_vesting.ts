@@ -1,10 +1,9 @@
-import { ethers, network, run, upgrades, defender } from "hardhat";
+import { ethers, network, run, upgrades } from "hardhat";
 
 import {
   getContracts,
   getEnvParams,
   saveContract,
-  getDefenderUpgradeApprovalOwnerAddress,
 } from "./utils/deploy-helper";
 
 const SECONDS_PER_DAY = 86400;
@@ -17,7 +16,7 @@ async function main() {
   }
 
   const LockonVesting = await ethers.getContractFactory("LockonVesting");
-  const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
+  const ownerAddress = envParams.ownerAddress;
 
   /**
    * 0: LOCK STAKING
@@ -31,7 +30,7 @@ async function main() {
     0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 10000, 10001, 10002,
   ];
   const vestingPeriods = Array(categoryIds.length).fill(300 * SECONDS_PER_DAY);
-  const lockonVesting = await defender.deployProxy(
+  const lockonVesting = await upgrades.deployProxy(
     LockonVesting,
     [ownerAddress, contracts.lockToken, categoryIds, vestingPeriods],
     { initializer: "initialize", kind: "uups" },

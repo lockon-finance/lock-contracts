@@ -1,11 +1,6 @@
-import { ethers, network, run, defender } from "hardhat";
+import { ethers, network, run, upgrades } from "hardhat";
 
-import {
-  getContracts,
-  getEnvParams,
-  saveContract,
-  getDefenderUpgradeApprovalOwnerAddress,
-} from "./utils/deploy-helper";
+import { getContracts, getEnvParams, saveContract } from "./utils/deploy-helper";
 
 async function main() {
   const envParams = getEnvParams();
@@ -15,9 +10,9 @@ async function main() {
   }
 
   const LockToken = await ethers.getContractFactory("LockToken");
-  const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
+  const ownerAddress = envParams.ownerAddress;
 
-  const lockToken = await defender.deployProxy(
+  const lockToken = await upgrades.deployProxy(
     LockToken,
     [envParams.lockTokenName, envParams.lockTokenSymbol, ownerAddress, envParams.managementAddress],
     { initializer: "initialize", kind: "uups" },

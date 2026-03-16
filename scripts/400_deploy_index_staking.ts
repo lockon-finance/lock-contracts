@@ -1,10 +1,9 @@
-import { ethers, network, run, defender } from "hardhat";
+import { ethers, network, run, upgrades } from "hardhat";
 
 import {
   getContracts,
   getEnvParams,
   saveContract,
-  getDefenderUpgradeApprovalOwnerAddress,
 } from "./utils/deploy-helper";
 
 async function main() {
@@ -15,10 +14,10 @@ async function main() {
   }
 
   const IndexStaking = await ethers.getContractFactory("IndexStaking");
-  const ownerAddress = await getDefenderUpgradeApprovalOwnerAddress();
+  const ownerAddress = envParams.ownerAddress;
   const startTimestamp = Math.floor(Date.now() / 1000);
   const bonusRatePerSecond = 2300; // (decimals=1e12)
-  const indexStaking = await defender.deployProxy(
+  const indexStaking = await upgrades.deployProxy(
     IndexStaking,
     [
       ownerAddress,

@@ -1,6 +1,6 @@
-import { ethers, network, run, defender } from "hardhat";
+import { ethers, network, run } from "hardhat";
 
-import { getContracts, getEnvParams, saveContract } from "./utils/deploy-helper";
+import { getContracts, getExplorers } from "./utils/deploy-helper";
 
 async function main() {
   const contracts = getContracts(network.name)[network.name];
@@ -11,5 +11,9 @@ async function main() {
 
 main().catch(error => {
   console.error(error);
+  const contracts = getContracts(network.name)[network.name];
+  console.log(
+    `Please manually verify the contract at ${getExplorers(network.name)}proxyContractChecker?a=${contracts.lockStaking}`,
+  );
   process.exitCode = 1;
 });
